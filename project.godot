@@ -9,10 +9,12 @@ config_version=5
 config/name="Pixel Werewolf"
 config/description="A cozy pixel-art social deduction game"
 config/features=PackedStringArray("4.2", "GL Compatibility")
+run/main_scene="res://scenes/main.tscn"
 
 [autoload]
 
 TestHarness="*res://scripts/test_harness.gd"
+GameState="*res://scripts/game_state.gd"
 
 [display]
 
