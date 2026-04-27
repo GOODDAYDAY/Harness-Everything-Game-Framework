@@ -136,6 +136,13 @@ func _cmd_screenshot(msg: Dictionary) -> void:
 	if image == null:
 		_send_error("failed to capture viewport image")
 		return
+	# Resize to viewport logical size (strips HiDPI scaling) to keep
+	# file small for base64 embedding in LLM context.
+	var vp_size := get_viewport().get_visible_rect().size
+	var target_w := int(vp_size.x)
+	var target_h := int(vp_size.y)
+	if image.get_width() != target_w or image.get_height() != target_h:
+		image.resize(target_w, target_h, Image.INTERPOLATE_BILINEAR)
 	var err := image.save_png(path)
 	if err != OK:
 		_send_error("failed to save screenshot: error %d" % err)
