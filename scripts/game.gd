@@ -17,36 +17,52 @@ const HAND_X    := 40
 const HAND_STEP := 52
 
 # UI text positions
-const SCORE_POS := Vector2(310, 50)
-const ROUND_POS := Vector2(310, 70)
+const SCORE_POS   := Vector2(310, 50)
+const ROUND_POS   := Vector2(310, 70)
 const WEATHER_POS := Vector2(310, 95)
-const HELP_POS  := Vector2(310, 130)
+const HELP_POS    := Vector2(310, 160)
 
-# ── Child nodes (created programmatically) ────────────────────────────────────────
-var _grid_sprites: Array[Sprite2D] = []  # one per cell
-var _tree_sprites: Array[Sprite2D] = []  # one per cell (tree on top)
-var _bond_sprites: Array[Sprite2D] = []  # one per active bond
-var _hand_sprites: Array[Sprite2D] = []  # one per seed in hand
-var _hand_labels:  Array[Label]    = []  # name label under each seed
-var _select_rect:  ColorRect            # selection highlight
-var _hover_rect:   ColorRect            # hover highlight
-var _ui_layer:     CanvasLayer
-var _score_label:  Label
-var _round_label:  Label
-var _weather_label: Label
-var _help_label:   Label
-var _end_panel:    PanelContainer        # game-over panel
-
-var _hover_cell := Vector2i(-1, -1)     # cell under mouse
-var _bond_flash_timers: Array[float] = []  # countdown per bond overlay
+# ── Animation constants ─────────────────────────────────────────────────────────
 const BOND_FLASH_DURATION := 1.2
+const SWAY_AMPLITUDE      := 1.2   # pixels of vertical sway
+const SWAY_SPEED          := 1.6   # radians/sec base speed
+const POPUP_RISE_SPEED    := 22.0  # px/s upward drift
+const POPUP_DURATION      := 1.8   # seconds a popup lives
 
+# ── Child nodes (created programmatically) ─────────────────────────────────────
+var _grid_sprites:   Array[Sprite2D]   = []  # one per cell
+var _tree_sprites:   Array[Sprite2D]   = []  # one per cell (tree on top)
+var _bond_sprites:   Array[Sprite2D]   = []  # flashing bond overlays (per bond event)
+var _bond_lines:     Array[Node]       = []  # persistent bond line nodes (Line2D + Labels)
+var _hand_sprites:   Array[Sprite2D]   = []  # one per seed in hand
+var _hand_labels:    Array[Label]      = []  # name label under each seed
+var _select_rect:    ColorRect                # selection highlight
+var _hover_rect:     ColorRect                # hover highlight
+var _ui_layer:       CanvasLayer
+var _score_label:    Label
+var _round_label:    Label
+var _weather_label:  Label
+var _help_label:     Label
+var _end_round_btn:  Button
+var _end_panel:      PanelContainer           # game-over panel
+
+# ── Animation state ─────────────────────────────────────────────────────────────
+var _hover_cell := Vector2i(-1, -1)          # cell under mouse
+var _bond_flash_timers: Array[float] = []    # countdown per bond overlay sprite
+var _sway_phases:       Array[float] = []    # per-tree sway phase (radians)
+var _sway_speeds:       Array[float] = []    # per-tree sway speed multiplier
+
+# Floating score popups: each { label: Label, timer: float, vel_y: float }
+var _popups: Array[Dictionary] = []
+
+# ── Ready ───────────────────────────────────────────────────────────────────────
 func _ready() -> void:
 	_build_scene()
 	GameState.state_changed.connect(_on_state_changed)
 	GameState.bond_formed.connect(_on_bond_formed)
 	GameState.round_started.connect(_on_round_started)
 	GameState.game_over.connect(_on_game_over)
+	GameState.score_gained.connect(_on_score_gained)
 	GameState.start_new_game()
 
 func _build_scene() -> void:
@@ -71,6 +87,10 @@ func _build_scene() -> void:
 			tree_sprite.visible = false
 			add_child(tree_sprite)
 			_tree_sprites.append(tree_sprite)
+
+			# Per-tree sway (random phase so they don't all move identically)
+			_sway_phases.append(randf() * TAU)
+			_sway_speeds.append(randf_range(0.8, 1.2))
 
 	# Hover rect (drawn above grid)
 	_hover_rect = ColorRect.new()
@@ -100,9 +120,6 @@ func _build_scene() -> void:
 	hand_lbl.add_theme_color_override("font_color", Palette.PARCHMENT2)
 	add_child(hand_lbl)
 
-	# Build hand area (initial empty; refreshed in _refresh_hand)
-	# (sprites added dynamically)
-
 	# UI layer for score etc.
 	_ui_layer = CanvasLayer.new()
 	_ui_layer.layer = 10
@@ -128,10 +145,18 @@ func _build_scene() -> void:
 	_help_label = Label.new()
 	_help_label.position = HELP_POS
 	_help_label.add_theme_color_override("font_color", Palette.DISABLED)
-	_help_label.text = "Click a seed,\nthen click the grove."
+	_help_label.text = "Click a seed,\nthen click the grove.\nRight-click to deselect."
 	_help_label.autowrap_mode = TextServer.AUTOWRAP_WORD
 	_help_label.custom_minimum_size = Vector2(160, 60)
 	_ui_layer.add_child(_help_label)
+
+	# End Round button
+	_end_round_btn = Button.new()
+	_end_round_btn.text = "End Round"
+	_end_round_btn.position = Vector2(SCORE_POS.x, 225)
+	_end_round_btn.size = Vector2(140, 24)
+	_end_round_btn.pressed.connect(_on_end_round_pressed)
+	_ui_layer.add_child(_end_round_btn)
 
 	# End-game panel (hidden until game over)
 	_end_panel = PanelContainer.new()
@@ -154,9 +179,12 @@ func _build_scene() -> void:
 	restart_btn.pressed.connect(_on_restart_pressed)
 	end_vbox.add_child(restart_btn)
 
-# ── Coordinate helpers ─────────────────────────────────────────────────────────────
+# ── Coordinate helpers ──────────────────────────────────────────────────────────
 func _cell_pos(col: int, row: int) -> Vector2:
 	return Vector2(GROVE_X + col * TILE_STEP, GROVE_Y + row * TILE_STEP)
+
+func _cell_center(col: int, row: int) -> Vector2:
+	return _cell_pos(col, row) + Vector2(TILE / 2.0, TILE / 2.0)
 
 func _pos_to_cell(pos: Vector2) -> Vector2i:
 	"""Convert screen position to grid cell. Returns (-1,-1) if outside grid."""
@@ -181,7 +209,7 @@ func _hand_index_at(pos: Vector2) -> int:
 			return i
 	return -1
 
-# ── Input ──────────────────────────────────────────────────────────────────────────────
+# ── Input ───────────────────────────────────────────────────────────────────────
 
 func _input(event: InputEvent) -> void:
 	if _end_panel.visible:
@@ -217,7 +245,11 @@ func _on_left_click(pos: Vector2) -> void:
 	if cell.x >= 0 and GameState.selected_seed_index >= 0:
 		GameState.place_seed(cell.x, cell.y)
 
-# ── State refresh ───────────────────────────────────────────────────────────────────────
+func _on_end_round_pressed() -> void:
+	if not _end_panel.visible:
+		GameState.end_round()
+
+# ── State refresh ────────────────────────────────────────────────────────────────
 
 func _on_state_changed() -> void:
 	_refresh_grid()
@@ -229,14 +261,26 @@ func _on_round_started(_round: int, _weather: Dictionary) -> void:
 
 func _on_bond_formed(cell_a: Vector2i, cell_b: Vector2i, bond_info: Dictionary) -> void:
 	_spawn_bond_overlay(cell_a, cell_b, bond_info)
+	_spawn_bond_line(cell_a, cell_b, bond_info)
 
 func _on_game_over(final_score: int, threshold: int) -> void:
 	_show_end_panel(final_score, threshold)
+	_end_round_btn.visible = false
 
 func _on_restart_pressed() -> void:
 	_end_panel.visible = false
+	_end_round_btn.visible = true
 	_clear_bond_sprites()
+	_clear_bond_lines()
+	_clear_popups()
 	GameState.start_new_game()
+
+func _on_score_gained(amount: int, label_text: String, col: int, row: int) -> void:
+	"""Spawn a floating score popup at the given cell position."""
+	var center := _cell_center(col, row)
+	_spawn_popup(label_text if label_text != "" else "+%d" % amount, center)
+
+# ── Grid / hand refresh ─────────────────────────────────────────────────────────
 
 func _refresh_grid() -> void:
 	for row in GameState.GROVE_ROWS:
@@ -292,7 +336,7 @@ func _refresh_hand() -> void:
 		_select_rect.visible = false
 
 func _refresh_ui() -> void:
-	var score := GameState.current_score
+	var score     := GameState.current_score
 	var threshold := GameState.HARMONY_THRESHOLD
 	_score_label.text = "Score: %d / %d" % [score, threshold]
 	_round_label.text = "Round %d" % GameState.current_round
@@ -306,6 +350,8 @@ func _refresh_ui() -> void:
 			w.get("name", ""),
 			w.get("description", ""),
 		]
+
+# ── Bond overlay (flashing on bond event) ──────────────────────────────────────
 
 func _spawn_bond_overlay(cell_a: Vector2i, cell_b: Vector2i, bond_info: Dictionary) -> void:
 	"""Flash a glowing overlay on both cells when a bond forms."""
@@ -325,6 +371,71 @@ func _clear_bond_sprites() -> void:
 	_bond_sprites.clear()
 	_bond_flash_timers.clear()
 
+# ── Persistent bond lines ──────────────────────────────────────────────────────
+
+func _spawn_bond_line(cell_a: Vector2i, cell_b: Vector2i, bond_info: Dictionary) -> void:
+	"""Draw a thin persistent coloured line connecting the two bonded cell centres."""
+	var bond_type: String = bond_info.get("bond_type", "amplify")
+	var line_color: Color
+	match bond_type:
+		"steam":      line_color = Palette.STEAM
+		"overgrowth": line_color = Palette.OVERGROWTH
+		"amplify":    line_color = Palette.AMPLIFY
+		_:            line_color = Palette.HIGHLIGHT
+	line_color.a = 0.6
+
+	var from_pt := _cell_center(cell_a.x, cell_a.y)
+	var to_pt   := _cell_center(cell_b.x, cell_b.y)
+
+	# Use a Line2D node for a clean bond line
+	var line := Line2D.new()
+	line.width = 2.0
+	line.default_color = line_color
+	line.add_point(from_pt)
+	line.add_point(to_pt)
+	# Gently pulse the line by animating width in _process via a small marker
+	line.set_meta("bond_type", bond_type)
+	line.set_meta("phase", randf() * TAU)
+	add_child(line)
+	_bond_lines.append(line)
+
+	# Also place a small icon Label at the midpoint showing bond name
+	var mid := (from_pt + to_pt) / 2.0 - Vector2(0, 8)
+	var name_lbl := Label.new()
+	name_lbl.text = bond_info.get("name", "")
+	name_lbl.position = mid
+	name_lbl.add_theme_color_override("font_color", line_color)
+	name_lbl.set_meta("is_bond_label", true)
+	add_child(name_lbl)
+	_bond_lines.append(name_lbl)  # store so we can clear it
+
+func _clear_bond_lines() -> void:
+	for n in _bond_lines:
+		n.queue_free()
+	_bond_lines.clear()
+
+# ── Floating score popups ──────────────────────────────────────────────────────
+
+func _spawn_popup(text: String, world_pos: Vector2) -> void:
+	"""Create a floating label that drifts upward and fades."""
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.position = world_pos - Vector2(16, 8)
+	lbl.add_theme_color_override("font_color", Palette.AMPLIFY)
+	add_child(lbl)
+	_popups.append({
+		"label": lbl,
+		"timer": POPUP_DURATION,
+	})
+
+func _clear_popups() -> void:
+	for p in _popups:
+		if is_instance_valid(p["label"]):
+			p["label"].queue_free()
+	_popups.clear()
+
+# ── End game panel ──────────────────────────────────────────────────────────────
+
 func _show_end_panel(final_score: int, threshold: int) -> void:
 	var harmonised := final_score >= threshold
 	var title_node := _end_panel.find_child("EndTitle")
@@ -336,10 +447,13 @@ func _show_end_panel(final_score: int, threshold: int) -> void:
 		score_node.text = "Final Score: %d / %d (%d%%)" % [final_score, threshold, pct]
 	_end_panel.visible = true
 
-# ── Per-frame ──────────────────────────────────────────────────────────────────────────────
+# ── Per-frame ───────────────────────────────────────────────────────────────────
 
 func _process(delta: float) -> void:
 	_update_bond_flashes(delta)
+	_update_tree_sway(delta)
+	_update_popups(delta)
+	_update_bond_line_pulse(delta)
 
 func _update_bond_flashes(delta: float) -> void:
 	"""Fade out bond overlay sprites over time."""
@@ -357,3 +471,47 @@ func _update_bond_flashes(delta: float) -> void:
 		_bond_sprites[idx].queue_free()
 		_bond_sprites.remove_at(idx)
 		_bond_flash_timers.remove_at(idx)
+
+func _update_tree_sway(delta: float) -> void:
+	"""Gently oscillate planted tree sprites for a living-forest feel."""
+	for row in GameState.GROVE_ROWS:
+		for col in GameState.GROVE_COLS:
+			var idx := row * GameState.GROVE_COLS + col
+			var ts := _tree_sprites[idx]
+			if not ts.visible:
+				continue
+			_sway_phases[idx] += delta * SWAY_SPEED * _sway_speeds[idx]
+			var offset_y := sin(_sway_phases[idx]) * SWAY_AMPLITUDE
+			ts.position = _cell_pos(col, row) + Vector2(0, offset_y)
+
+func _update_popups(delta: float) -> void:
+	"""Drift floating score labels upward and fade them out."""
+	var to_remove: Array[int] = []
+	for i in _popups.size():
+		var p: Dictionary = _popups[i]
+		p["timer"] -= delta
+		var lbl: Label = p["label"]
+		if not is_instance_valid(lbl):
+			to_remove.append(i)
+			continue
+		# Drift upward
+		lbl.position.y -= POPUP_RISE_SPEED * delta
+		# Fade
+		var alpha := clamp(p["timer"] / POPUP_DURATION, 0.0, 1.0)
+		lbl.modulate = Color(1, 1, 1, alpha)
+		if p["timer"] <= 0.0:
+			to_remove.append(i)
+	for i in to_remove.size():
+		var idx := to_remove[to_remove.size() - 1 - i]
+		if is_instance_valid(_popups[idx]["label"]):
+			_popups[idx]["label"].queue_free()
+		_popups.remove_at(idx)
+
+func _update_bond_line_pulse(delta: float) -> void:
+	"""Gently pulse bond line widths so they feel alive."""
+	for node in _bond_lines:
+		if node is Line2D and is_instance_valid(node):
+			var phase: float = node.get_meta("phase", 0.0)
+			phase += delta * 1.4
+			node.set_meta("phase", phase)
+			node.width = 1.5 + sin(phase) * 0.7

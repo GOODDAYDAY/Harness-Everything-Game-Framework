@@ -6,8 +6,10 @@ signal state_changed
 signal bond_formed(cell_a: Vector2i, cell_b: Vector2i, bond_info: Dictionary)
 signal round_started(round_num: int, weather: Dictionary)
 signal game_over(final_score: int, threshold: int)
+# score_gained: amount, optional display text (e.g. bond name), column, row of tree placed
+signal score_gained(amount: int, label_text: String, col: int, row: int)
 
-# ── Constants ────────────────────────────────────────────────────────────────────
+# ── Constants ────────────────────────────────────────────────────────────────
 const GROVE_COLS    := 4
 const GROVE_ROWS    := 3
 const GROVE_SIZE    := GROVE_COLS * GROVE_ROWS  # 12 cells
@@ -15,13 +17,12 @@ const SEEDS_PER_ROUND := 3
 const HARMONY_THRESHOLD := 36  # score needed to "harmonise" the grove
 const BLOCKED_CELL_COUNT := 2  # how many cells are blocked per run
 
-# ── Weather events ─────────────────────────────────────────────────────────────
-# Each event: { name, description, effect_type, value }
+# ── Weather events ────────────────────────────────────────────────────────
 const WEATHER_EVENTS := [
 	{
 		"name": "Gentle Rain",
 		"description": "Bloom trees grow stronger this round! +2 score each.",
-		"icon": "🌧️",
+		"icon": "🍇️",
 		"effect_type": "boost_type",
 		"target_type": 2,  # BLOOM
 		"value": 2,
@@ -67,7 +68,7 @@ const WEATHER_EVENTS := [
 	},
 ]
 
-# ── Live state ───────────────────────────────────────────────────────────────────────
+# ── Live state ──────────────────────────────────────────────────────────────────
 var rng := RandomNumberGenerator.new()
 
 # grid: flat array of size GROVE_COLS * GROVE_ROWS
@@ -94,7 +95,7 @@ var total_trees_placed: int = 0
 # active bonds: Array of { cell_a: Vector2i, cell_b: Vector2i, bond: Dict }
 var active_bonds: Array[Dictionary] = []
 
-# ── Init ─────────────────────────────────────────────────────────────────────────────
+# ── Init ────────────────────────────────────────────────────────────────────
 func start_new_game() -> void:
 	rng.randomize()
 	_init_grid()
@@ -121,7 +122,7 @@ func _init_grid() -> void:
 func _init_deck() -> void:
 	deck.clear()
 	hand.clear()
-	# Fill deck: 3 copies of each common tree, 1 Wisp
+	# Fill deck: weighted copies of each tree type
 	for t in TreeTypes.DRAW_WEIGHTS.size():
 		for _i in range(TreeTypes.DRAW_WEIGHTS[t] * 2):
 			deck.append(t)
@@ -132,7 +133,7 @@ func _init_deck() -> void:
 		deck[i] = deck[j]
 		deck[j] = tmp
 
-# ── Round management ─────────────────────────────────────────────────────────────────
+# ── Round management ───────────────────────────────────────────────────────────────
 func start_round() -> void:
 	current_round += 1
 	# Draw weather event
@@ -158,7 +159,7 @@ func _refill_deck() -> void:
 	_init_deck()  # reshuffle fresh deck
 
 func end_round() -> void:
-	"""Called when player ends round (or hand is empty)."""
+	"""Called when the player ends a round (button press or hand empty)."""
 	# Check if grove is full
 	if _is_grove_full():
 		_calculate_final_score()
@@ -172,7 +173,7 @@ func _is_grove_full() -> bool:
 			return false
 	return true
 
-# ── Placement & scoring ───────────────────────────────────────────────────────────────
+# ── Placement & scoring ──────────────────────────────────────────────────────────────
 func place_seed(col: int, row: int) -> bool:
 	"""Place selected seed at (col, row). Returns true on success."""
 	if selected_seed_index < 0 or selected_seed_index >= hand.size():
@@ -190,26 +191,33 @@ func place_seed(col: int, row: int) -> bool:
 	selected_seed_index = -1
 	total_trees_placed += 1
 
-	# Score this placement
-	var placement_score := TreeTypes.get_base_score(tree_type)
-	# Check bonds with neighbours
-	var new_bonds := _check_bonds_at(col, row)
-	for bond_data in new_bonds:
-		active_bonds.append(bond_data)
-		placement_score += bond_data["bond"].get("score_bonus", 0)
-		# Apply weather modifier
-		placement_score += _weather_bonus_for_bond(bond_data["bond"])
-		emit_signal("bond_formed", bond_data["cell_a"], bond_data["cell_b"], bond_data["bond"])
-
+	# --- Base placement score ---
+	var base_score := TreeTypes.get_base_score(tree_type)
 	# Apply weather boost to this tree type
 	if current_weather.get("effect_type") == "boost_type":
 		if current_weather.get("target_type") == tree_type:
-			placement_score += current_weather.get("value", 0)
+			base_score += current_weather.get("value", 0)
+	current_score += base_score
+	# Emit base placement popup (e.g. "+2")
+	emit_signal("score_gained", base_score, "+%d" % base_score, col, row)
 
-	current_score += placement_score
+	# --- Bond scores ---
+	var new_bonds := _check_bonds_at(col, row)
+	for bond_data in new_bonds:
+		active_bonds.append(bond_data)
+		var bond_score := bond_data["bond"].get("score_bonus", 0)
+		# Apply weather modifier
+		bond_score += _weather_bonus_for_bond(bond_data["bond"])
+		current_score += bond_score
+		# Emit bond popup (e.g. "Steam Bond +4")
+		var bond_name: String = bond_data["bond"].get("name", "Bond")
+		var popup_text := "%s +%d" % [bond_name, bond_score]
+		emit_signal("score_gained", bond_score, popup_text, col, row)
+		emit_signal("bond_formed", bond_data["cell_a"], bond_data["cell_b"], bond_data["bond"])
+
 	emit_signal("state_changed")
 
-	# Auto-end round when hand empty
+	# Auto-end round when hand is empty
 	if hand.is_empty():
 		end_round()
 	return true
@@ -259,11 +267,10 @@ func _weather_bonus_for_bond(bond: Dictionary) -> int:
 	return 0
 
 func _calculate_final_score() -> void:
-	"""Recalculate score from scratch (bonds may have compounded)."""
-	# Score is accumulated live during placement; just ensure it's up to date
+	"""Score is accumulated live during placement; this is a hook for any final adjustments."""
 	pass
 
-# ── Accessors ───────────────────────────────────────────────────────────────────────────
+# ── Accessors ──────────────────────────────────────────────────────────────────────
 func get_cell(col: int, row: int) -> Dictionary:
 	var idx := row * GROVE_COLS + col
 	if idx < 0 or idx >= grid.size():
