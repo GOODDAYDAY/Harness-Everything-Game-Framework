@@ -6,17 +6,12 @@ config_version=5
 
 [application]
 
-config/name="Ember Grove"
-config/description="A cozy harmony tree puzzle game"
-run/main_scene="res://scenes/main.tscn"
+config/name="Pixel Werewolf"
+config/description="A cozy pixel-art social deduction game"
 config/features=PackedStringArray("4.2", "GL Compatibility")
 
 [autoload]
 
-Palette="*res://scripts/palette.gd"
-TreeTypes="*res://scripts/tree_types.gd"
-PixelArt="*res://scripts/art/pixel_art.gd"
-GameState="*res://scripts/game_state.gd"
 TestHarness="*res://scripts/test_harness.gd"
 
 [display]
