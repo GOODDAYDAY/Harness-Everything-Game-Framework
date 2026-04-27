@@ -17,6 +17,15 @@ var _buffer: String = ""
 # ── Lifecycle ─────────────────────────────────────────────────────────────
 
 func _ready() -> void:
+	# Auto-disable in release builds; override via project setting
+	var enabled: bool = ProjectSettings.get_setting(
+		"debug/test_harness/enabled", OS.is_debug_build()
+	)
+	if not enabled:
+		print("TestHarness: disabled (release build or debug/test_harness/enabled = false)")
+		set_process(false)
+		return
+
 	_server = TCPServer.new()
 	var err := _server.listen(PORT, HOST)
 	if err != OK:
