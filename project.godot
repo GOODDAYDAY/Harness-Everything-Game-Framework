@@ -17,6 +17,7 @@ Palette="*res://scripts/palette.gd"
 TreeTypes="*res://scripts/tree_types.gd"
 PixelArt="*res://scripts/art/pixel_art.gd"
 GameState="*res://scripts/game_state.gd"
+TestHarness="*res://scripts/test_harness.gd"
 
 [display]
 
