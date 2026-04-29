@@ -1,4 +1,4 @@
-# TestHarness — Autoload for external test automation
+﻿# TestHarness — Autoload for external test automation
 #
 # Provides a TCP server on port 19840 that accepts JSON commands from the
 # Python GameBridge. Handles: ping, screenshot, input injection, state
@@ -234,44 +234,58 @@ func _cmd_state() -> void:
 		_send_error("GameState autoload not found")
 		return
 
-	# Serialize grid
-	var grid_data := []
-	for cell in gs.grid:
-		grid_data.append({"type": cell["type"], "blocked": cell["blocked"]})
+	var raw_state: Dictionary = gs.get_state()
 
-	# Serialize hand
-	var hand_data := []
-	for seed_type in gs.hand:
-		hand_data.append(seed_type)
+	# Build a grid-style summary of player seats for the Python game_state tool.
+	# The harness tool expects keys: score, round, trees_placed, selected_seed,
+	# weather, grid (2D array), hand (array of strings).
+	# We map werewolf concepts onto these keys so meaningful data is shown.
+	var player_grid: Array = []
+	var grid_row: Array = []
+	var plist: Array = raw_state.get("players", [])
+	for p in plist:
+		var cell: String = ""
+		var alive: bool = p.get("alive", false)
+		if alive:
+			var full_role: String = p.get("role", "?")
+			var role_short: String = full_role.substr(0, 1)
+			var marker: String = "[" + role_short + "]"
+			if p.get("is_sheriff", false):
+				marker = marker + "★"
+			cell = marker
+		else:
+			cell = "[X]"
+		grid_row.append(cell)
+		if grid_row.size() >= 4:  # 4 seats per row, 3 rows = 12 players
+			player_grid.append(grid_row.duplicate())
+			grid_row.clear()
+	if grid_row.size() > 0:
+		player_grid.append(grid_row)
 
-	# Serialize bonds
-	var bonds_data := []
-	for bond in gs.active_bonds:
-		bonds_data.append({
-			"cell_a": [bond["cell_a"].x, bond["cell_a"].y],
-			"cell_b": [bond["cell_b"].x, bond["cell_b"].y],
-			"bond_type": bond["bond"].get("bond_type", ""),
-			"bond_name": bond["bond"].get("name", ""),
-		})
+	# Hand: info about the human player
+	var hand_info: Array = []
+	var human_idx: int = gs.human_player_index
+	if human_idx >= 0 and human_idx < plist.size():
+		var hp: Dictionary = plist[human_idx]
+		hand_info.append("You: " + str(hp.get("name", "?")))
+		hand_info.append("Role: " + str(hp.get("role", "?")))
+		hand_info.append("Team: " + str(hp.get("team", "?")))
+		var hp_alive: bool = hp.get("alive", false)
+		hand_info.append("Alive: " + ("Yes" if hp_alive else "No"))
+
+	var phase_name: String = raw_state.get("phase", "SETUP")
 
 	_send_response({
 		"ok": true,
-		"state": {
-			"score": gs.current_score,
-			"round": gs.current_round,
-			"selected_seed": gs.selected_seed_index,
-			"total_trees": gs.total_trees_placed,
-			"grid_cols": gs.GROVE_COLS,
-			"grid_rows": gs.GROVE_ROWS,
-			"grid": grid_data,
-			"hand": hand_data,
-			"bonds": bonds_data,
-			"weather": {
-				"name": gs.current_weather.get("name", ""),
-				"icon": gs.current_weather.get("icon", ""),
-				"description": gs.current_weather.get("description", ""),
-			},
-		},
+		"state": raw_state,
+		# Template-compatible keys for the Python game_state tool
+		"score": raw_state.get("day", 0),
+		"round": raw_state.get("round", 0),
+		"trees_placed": raw_state.get("alive_count", 0),
+		"selected_seed": raw_state.get("sheriff", -1),
+		"weather": phase_name,
+		"grid": player_grid,
+		"hand": hand_info,
 	})
 
 

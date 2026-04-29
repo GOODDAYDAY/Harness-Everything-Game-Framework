@@ -1,0 +1,19 @@
+# Harness outputs — all generated artifacts
+output/
+
+# Godot
+.godot/
+*.import
+*.translation
+
+# Python
+__pycache__/
+*.pyc
+
+# Stray test artifacts (but NOT game assets)
+/*.png
+/test_*.txt
+
+# OS
+Thumbs.db
+.DS_Store

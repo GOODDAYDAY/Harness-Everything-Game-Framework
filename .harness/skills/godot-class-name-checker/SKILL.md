@@ -1,3 +1,8 @@
+﻿---
+name: godot-class-name-checker
+description: "Godot 4.x 内置类名冲突检查器 — 创建新类前检查是否与Godot内置类名冲突"
+auto_load: false
+---
 # Godot 类名冲突检查器
 
 ## 概述
