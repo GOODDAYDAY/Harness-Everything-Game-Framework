@@ -227,7 +227,7 @@ class GameState:
         result["saved"] = saved or result["saved"]
 
         # Resolve hunter vengeance if needed (hunter killed at night)
-        if self.hunter_needs_vengeance and result["victim"] is not None:
+        if self.hunter_needs_vengeance and (result["victim"] is not None or result["poisoned"] is not None):
             # Hunter vengeance is resolved in DAY_ANNOUNCE phase in main.py
             result["hunter_vengeance"] = True
 
