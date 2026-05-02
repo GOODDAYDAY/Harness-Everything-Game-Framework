@@ -7,9 +7,11 @@ with procedurally drawn pixel-art tiles. No external assets needed.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Any
 
 import pygame
+
+from game.player_sprites import CHAR_H, CHAR_W, get_character_sprite
 
 # Constants
 TILE_SIZE = 80
@@ -340,7 +342,8 @@ def _draw_tile(tile_type: int, night: bool) -> pygame.Surface:
                 sx = (i * 47 + 13) % TILE_SIZE
                 sy = (i * 31 + 7) % TILE_SIZE
                 brightness = 180 + (i * 13) % 75
-                surf.set_at((sx, sy), (brightness, brightness, brightness + 20))
+                b = min(brightness + 20, 255)
+                surf.set_at((sx, sy), (brightness, brightness, b))
 
     elif tile_type == T_SKY_TREE:
         surf.fill(c("sky"))
@@ -428,14 +431,34 @@ def get_tile(tile_type: int, night: bool) -> pygame.Surface:
 
 # ── Village renderer ───────────────────────────────────────────────
 
+# Player home positions on the village grid (row, col)
+# Each player stands adjacent to their house door
+PLAYER_HOMES: list[tuple[int, int]] = [
+    (6, 3),   # Player 0  - near house 1 (top-left)
+    (6, 4),   # Player 1
+    (6, 22),  # Player 2  - near house 2 (top-right)
+    (6, 23),  # Player 3
+    (11, 5),  # Player 4  - near house 3 (mid-left)
+    (11, 6),  # Player 5
+    (11, 23), # Player 6  - near house 4 (mid-right)
+    (11, 24), # Player 7
+    (16, 10), # Player 8  - near house 5 (bottom-left)
+    (16, 11), # Player 9
+    (16, 20), # Player 10 - near house 6 (bottom-right)
+    (16, 21), # Player 11
+]
+
+
 class VillageRenderer:
-    """Renders the pixel-art village background."""
+    """Renders the pixel-art village background with player characters."""
 
     def __init__(self) -> None:
         self._tile_map = _build_village_map()
         # Pre-generate night and day background surfaces
         self._bg_day: Optional[pygame.Surface] = None
         self._bg_night: Optional[pygame.Surface] = None
+        self._players: list[Optional[Any]] = []  # list of player dicts or None
+        self._font: Optional[pygame.font.Font] = None
 
     def _build_background(self, night: bool) -> pygame.Surface:
         """Build the full background surface from the tile map."""
@@ -457,10 +480,59 @@ class VillageRenderer:
                 self._bg_day = self._build_background(False)
             return self._bg_day
 
+    def set_players(self, players: list[Any]) -> None:
+        """Set the player list for rendering. Each item should have:
+        .index, .alive, .name, .role attributes.
+        """
+        self._players = list(players)
+
     def render(self, screen: pygame.Surface, night: bool) -> None:
-        """Draw the village background onto the screen."""
+        """Draw the village background and player characters onto the screen."""
         bg = self.get_background(night)
         screen.blit(bg, (0, 0))
+
+        # Render player characters on top of the background
+        self._render_players(screen, night)
+
+    def _render_players(self, screen: pygame.Surface, night: bool) -> None:
+        """Draw character sprites for all players at their home positions."""
+        if not self._players:
+            return
+
+        if self._font is None:
+            try:
+                self._font = pygame.font.Font(None, 18)
+            except pygame.error:
+                self._font = pygame.font.Font(None, 18)
+
+        for player in self._players:
+            if player is None:
+                continue
+
+            idx = player.index
+            alive = player.alive
+            pos_idx = idx % len(PLAYER_HOMES)
+            row, col = PLAYER_HOMES[pos_idx]
+
+            # Centre the character sprite in the tile
+            sprite = get_character_sprite(idx, alive)
+            x_pos = col * TILE_SIZE + (TILE_SIZE - CHAR_W) // 2
+            y_pos = row * TILE_SIZE + TILE_SIZE - CHAR_H - 4
+
+            screen.blit(sprite, (x_pos, y_pos))
+
+            # Draw name label below
+            if self._font:
+                name = getattr(player, 'name', f'P{idx}')
+                if not alive:
+                    name += " ✗"
+                label = self._font.render(name, True, (255, 255, 255) if not night else (200, 200, 200))
+                label_x = col * TILE_SIZE + (TILE_SIZE - label.get_width()) // 2
+                label_y = y_pos + CHAR_H + 2
+                # Shadow for readability
+                shadow = self._font.render(name, True, (0, 0, 0))
+                screen.blit(shadow, (label_x + 1, label_y + 1))
+                screen.blit(label, (label_x, label_y))
 
     def invalidate_cache(self) -> None:
         """Clear cached backgrounds (e.g. on day/night transition)."""

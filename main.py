@@ -210,7 +210,10 @@ class WerewolfGame:
         state = self.game_state
         is_night = self._is_night
 
-        # ── 1. Render village background ──
+        # ── 0. Update player positions for renderer ──
+        self.renderer.set_players(state.players.players)
+
+        # ── 1. Render village background + player characters ──
         self.renderer.render(screen, is_night)
 
         # ── 2. Semi-transparent overlay for UI readability ──
