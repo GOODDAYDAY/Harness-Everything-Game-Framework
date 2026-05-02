@@ -968,6 +968,313 @@ def get_vote_pulse_alpha(pidx: int) -> float:
     return _VOTE_PULSE_TIMERS.get(pidx, 0.0) / 0.4
 
 
+# ──────────────────────────────────────────────
+# Menu / overlay rendering (extracted from game_loop.py)
+# ──────────────────────────────────────────────
+
+
+def draw_main_menu(screen: pygame.Surface, sw: int, sh: int,
+                    menu_option: int, menu_fade_in: float) -> None:
+    """Draw the main menu screen."""
+    from game.bitmap_font import render_text
+    from game.text import _
+
+    # Background — minimal dark gradient
+    for y in range(sh):
+        t = y / sh
+        r = int(20 * (1 - t) + 10 * t)
+        g = int(15 * (1 - t) + 8 * t)
+        b = int(30 * (1 - t) + 15 * t)
+        pygame.draw.line(screen, (r, g, b), (0, y), (sw, y))
+
+    # Vignette overlay
+    vignette = pygame.Surface((sw, sh), pygame.SRCALPHA)
+    steps = max(10, int(20 * sh / 1440))
+    for i in range(steps):
+        alpha = max(0, int(140 - i * (140 / steps)))
+        spread = int(i * (40 * sw / 2560))
+        pygame.draw.rect(
+            vignette, (0, 0, 0, alpha),
+            (spread, spread, sw - spread * 2, sh - spread * 2),
+        )
+    screen.blit(vignette, (0, 0))
+
+    # Gentle dark overlay on top
+    overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 100))
+    screen.blit(overlay, (0, 0))
+
+    # ── Title Block ──
+    title_scale = max(2, int(5 * sh / 1440))
+    subtitle_scale = max(1, int(2 * sh / 1440))
+    cx = sw // 2
+    title_y = sh // 4
+
+    # Title text
+    title_str = "Pixel Werewolf"
+    title_text = render_text(
+        title_str,
+        scale=title_scale, color=(200, 180, 140), shadow=(40, 30, 10)
+    )
+    tw = title_text.get_width()
+    screen.blit(title_text, (cx - tw // 2, title_y))
+
+    # Subtitle
+    subtitle_str = _("tagline")
+    sub_text = render_text(
+        subtitle_str,
+        scale=subtitle_scale, color=(160, 140, 100), shadow=(30, 20, 5)
+    )
+    sub_tw = sub_text.get_width()
+    screen.blit(sub_text, (cx - sub_tw // 2, title_y + title_text.get_height() + 20))
+
+    # ── Menu Options ──
+    options = [_("start_game"), _("settings"), _("quit")]
+    center_y = sh // 2 + int(80 * sh / 1440)
+    for i, opt in enumerate(options):
+        by = center_y + i * int(80 * sh / 1440)
+        # Button background
+        bx = cx - int(200 * sw / 2560)
+        bw = int(400 * sw / 2560)
+        bh = int(60 * sh / 1440)
+
+        if menu_option == i:
+            color = (140, 110, 60)
+            inner = (180, 150, 90)
+        else:
+            color = (80, 70, 50)
+            inner = (120, 100, 70)
+
+        pygame.draw.rect(screen, color, (bx, by, bw, bh), border_radius=4)
+        pygame.draw.rect(screen, inner, (bx + 2, by + 2, bw - 4, bh - 4), border_radius=3)
+
+        opt_scale = max(1, int(2 * sh / 1440))
+        opt_text = render_text(
+            opt, scale=opt_scale,
+            color=(220, 210, 190) if menu_option == i else (180, 170, 150),
+        )
+        otw = opt_text.get_width()
+        screen.blit(opt_text, (cx - otw // 2, by + (bh - opt_text.get_height()) // 2))
+
+    # ── Footer ──
+    footer_scale = max(1, int(1 * sh / 1440))
+    footer = render_text(
+        _("footer_tip"),
+        scale=footer_scale, color=(100, 90, 70)
+    )
+    fw = footer.get_width()
+    screen.blit(footer, (cx - fw // 2, sh - int(60 * sh / 1440)))
+
+    # Fade in
+    if menu_fade_in < 1.0:
+        fade = pygame.Surface((sw, sh))
+        fade.set_alpha(int(255 * (1.0 - menu_fade_in)))
+        fade.fill((0, 0, 0))
+        screen.blit(fade, (0, 0))
+
+
+def draw_settings_overlay(screen: pygame.Surface, sw: int, sh: int,
+                           settings_option: int, settings_fade_in: float) -> None:
+    """Draw the settings overlay on top of the main menu."""
+    from game.bitmap_font import render_text
+    from game.text import _, LANG
+
+    cx = sw // 2
+    cy = sh // 2
+
+    # Settings panel background
+    pw = int(500 * sw / 2560)
+    ph = int(350 * sh / 1440)
+    px = cx - pw // 2
+    py = cy - ph // 2 - int(60 * sh / 1440)
+    pygame.draw.rect(screen, (40, 35, 25), (px, py, pw, ph), border_radius=8)
+    pygame.draw.rect(screen, (80, 70, 50), (px + 2, py + 2, pw - 4, ph - 4), border_radius=7)
+    pygame.draw.rect(screen, (60, 50, 35), (px + 4, py + 4, pw - 8, ph - 8), border_radius=6)
+
+    # Title
+    title_scale = max(2, int(4 * sh / 1440))
+    title = render_text(_("settings_title"), scale=title_scale, color=(220, 210, 180), shadow=(40, 30, 15))
+    title_y = py + int(30 * sh / 1440)
+    screen.blit(title, (cx - title.get_width() // 2, title_y))
+
+    # Separator line
+    sep_y = title_y + title.get_height() + int(20 * sh / 1440)
+    pygame.draw.line(screen, (100, 90, 70), (px + 40, sep_y), (px + pw - 40, sep_y), 2)
+
+    # Settings options
+    lang_label = _("settings_current_lang") if LANG == "zh" else _("settings_current_lang")
+    options = [lang_label, _("settings_back")]
+
+    opt_scale = max(1, int(2 * sh / 1440))
+    opt_start_y = sep_y + int(40 * sh / 1440)
+
+    for i, opt_text_str in enumerate(options):
+        oy = opt_start_y + i * int(70 * sh / 1440)
+
+        ox = px + int(40 * sw / 2560)
+        ow = pw - int(80 * sw / 2560)
+        oh = int(50 * sh / 1440)
+
+        if settings_option == i:
+            color = (120, 95, 55)
+            inner = (160, 130, 80)
+        else:
+            color = (70, 60, 40)
+            inner = (100, 85, 60)
+
+        pygame.draw.rect(screen, color, (ox, oy, ow, oh), border_radius=4)
+        pygame.draw.rect(screen, inner, (ox + 2, oy + 2, ow - 4, oh - 4), border_radius=3)
+
+        opt_text = render_text(opt_text_str, scale=opt_scale,
+                               color=(220, 210, 190) if settings_option == i else (180, 170, 150))
+        screen.blit(opt_text, (ox + (ow - opt_text.get_width()) // 2,
+                               oy + (oh - opt_text.get_height()) // 2))
+
+    # Hint text at bottom
+    hint_scale = max(1, int(1 * sh / 1440))
+    hint = render_text(_("settings_hint") if LANG == "zh" else _("settings_hint"),
+                       scale=hint_scale, color=(120, 110, 90))
+    hint_y = py + ph - int(30 * sh / 1440) - hint.get_height()
+    screen.blit(hint, (cx - hint.get_width() // 2, hint_y))
+
+
+def draw_role_reveal(screen: pygame.Surface, sw: int, sh: int,
+                     human_player) -> None:
+    """Draw the role reveal card for the human player."""
+    from game.bitmap_font import render_text
+    from game.text import _
+    from game.roles import Team
+    from game.role_icons import get_role_icon
+
+    if not human_player:
+        return
+
+    # Darken background
+    overlay = pygame.Surface((sw, sh))
+    overlay.set_alpha(200)
+    overlay.fill((0, 0, 0))
+    screen.blit(overlay, (0, 0))
+
+    # Card
+    card_w = int(600 * sw / 2560)
+    card_h = int(400 * sh / 1440)
+    card_x = (sw - card_w) // 2
+    card_y = (sh - card_h) // 2
+
+    # Shadow
+    pygame.draw.rect(screen, (10, 10, 10), (card_x + 4, card_y + 4, card_w, card_h),
+                     border_radius=12)
+    # Card background
+    pygame.draw.rect(screen, (40, 35, 50), (card_x, card_y, card_w, card_h),
+                     border_radius=12)
+    pygame.draw.rect(screen, (80, 70, 90), (card_x + 2, card_y + 2, card_w - 4, card_h - 4),
+                     border_radius=10)
+
+    # Role title
+    title_scale = max(2, int(4 * sh / 1440))
+    title_text = render_text(
+        _("your_role"),
+        scale=title_scale, color=(200, 180, 140), shadow=(40, 30, 10)
+    )
+    text_margin = int(200 * sw / 2560)
+    screen.blit(title_text, (card_x + text_margin, card_y + int(50 * sh / 1440)))
+
+    # Role description
+    desc_scale = max(1, int(2 * sh / 1440))
+    desc = human_player.role.description
+    desc_text = render_text(
+        desc,
+        scale=desc_scale, color=(200, 200, 200), shadow=(20, 20, 20)
+    )
+    screen.blit(desc_text, (card_x + text_margin, card_y + int(110 * sh / 1440)))
+
+    # Team info
+    team_scale = max(1, int(2 * sh / 1440))
+    team_str = _("team") + ": "
+    if human_player.role.team == Team.WEREWOLF:
+        team_str += _("werewolf_team")
+        team_color = (200, 80, 80)
+    elif human_player.role.team == Team.VILLAGE:
+        team_str += _("village_team")
+        team_color = (100, 180, 100)
+    else:
+        team_str += _("neutral_team")
+        team_color = (180, 180, 100)
+    team_text = render_text(team_str, scale=team_scale, color=team_color)
+    screen.blit(team_text, (card_x + text_margin, card_y + int(170 * sh / 1440)))
+
+    # Role icon
+    icon = get_role_icon(human_player.role)
+    if icon:
+        icon_size = int(64 * min(sw / 2560, sh / 1440))
+        icon_scaled = pygame.transform.scale(icon, (icon_size, icon_size))
+        screen.blit(icon_scaled, (card_x + card_w - icon_size - int(40 * sw / 2560),
+                                   card_y + int(50 * sh / 1440)))
+
+    # Press space to continue
+    cont_scale = max(1, int(2 * sh / 1440))
+    continue_text = render_text(
+        _("press_space"),
+        scale=cont_scale, color=(140, 140, 140), shadow=(10, 10, 10)
+    )
+    ctw = continue_text.get_width()
+    screen.blit(continue_text, ((sw - ctw) // 2, card_y + card_h - int(50 * sh / 1440)))
+
+
+def draw_game_over(screen: pygame.Surface, sw: int, sh: int,
+                   winner: str | None, flash_color: tuple[int, int, int],
+                   flash_timer: float, flash_duration: float,
+                   flash_active: bool) -> None:
+    """Draw the game over screen."""
+    from game.bitmap_font import render_text
+    from game.text import _
+
+    # Darken
+    overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 180))
+    screen.blit(overlay, (0, 0))
+
+    cx = sw // 2
+    cy = sh // 2
+
+    # Winner text
+    if winner:
+        if winner == "werewolf":
+            winner_title = _("werewolf_wins")
+            color = (200, 60, 60)
+        else:
+            winner_title = _("village_wins")
+            color = (200, 180, 80)
+    else:
+        winner_title = _("game_over")
+        color = (180, 180, 180)
+
+    title_scale = max(2, int(5 * sh / 1440))
+    title_text = render_text(
+        winner_title, scale=title_scale, color=color, shadow=(40, 30, 10)
+    )
+    tw = title_text.get_width()
+    screen.blit(title_text, (cx - tw // 2, cy - int(120 * sh / 1440)))
+
+    # Restart / Quit
+    restart_txt = _("restart_prompt")
+    quit_txt = _("quit_prompt")
+    opt_scale = max(1, int(2 * sh / 1440))
+    restart_render = render_text(restart_txt, scale=opt_scale, color=(180, 180, 180))
+    quit_render = render_text(quit_txt, scale=opt_scale, color=(180, 180, 180))
+    rw = restart_render.get_width()
+    qw = quit_render.get_width()
+    screen.blit(restart_render, (cx - rw // 2, cy + int(40 * sh / 1440)))
+    screen.blit(quit_render, (cx - qw // 2, cy + int(80 * sh / 1440)))
+
+    # Flash
+    if flash_active:
+        alpha = int(255 * (flash_timer / max(flash_duration, 0.001)))
+        flash_surf = pygame.Surface((sw, sh))
+        flash_surf.set_alpha(alpha)
+        flash_surf.fill(flash_color)
+        screen.blit(flash_surf, (0, 0))
+
 def is_elimination_highlighted(pidx: int) -> bool:
     """Check if a player is currently in elimination highlight animation."""
     return pidx in _ELIMINATION_TIMERS
