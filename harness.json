@@ -1,0 +1,65 @@
+{
+  "harness": {
+    "model": "deepseek-v4-flash",
+    "max_tokens": 16384,
+    "base_url": "https://api.deepseek.com/anthropic",
+    "api_key": "",
+    "workspace": ".",
+    "allowed_paths": [
+      "."
+    ],
+    "extra_tools": [
+      "game_launch",
+      "game_screenshot",
+      "game_input",
+      "game_state",
+      "game_record"
+    ],
+    "custom_tools_path": "harness_tools",
+    "tool_config": {
+      "game_screenshot": {
+        "output_dir": "../werewolf_output/screenshots"
+      }
+    },
+    "bash_command_denylist": [
+      "rm",
+      "shutdown",
+      "reboot",
+      "mkfs",
+      "dd"
+    ],
+    "max_tool_turns": 200,
+    "max_concurrent_llm_calls": 4,
+    "log_level": "INFO"
+  },
+  "mission": "Build Pixel Werewolf — a 2K (2560x1440) pixel-art werewolf social deduction game in Python/pygame. 12-player standard setup. AI-driven NPCs. Game tools available for visual verification. See skills for rules.\n\nHARD INVARIANTS:\n- Viewport MUST be 2560x1440. Never change this.\n- Tile size: 80x80 pixels.",
+  "max_cycles": 100,
+  "continuous": false,
+  "cycle_hooks": [],
+  "auto_commit": true,
+  "commit_repos": [
+    "."
+  ],
+  "auto_push": false,
+  "enable_game_testing": true,
+  "output_dir": "../werewolf_output",
+  "extra": {
+    "game_name": "Pixel Werewolf",
+    "game_type": "python",
+    "entry_point": "main.py",
+    "viewport": "2560x1440",
+    "tile_size": "80x80",
+    "target_fps": 60
+  },
+  "game": {
+    "game_type": "python",
+    "entry_point": "main.py",
+    "viewport": {
+      "width": 2560,
+      "height": 1440
+    }
+  },
+  "auto_squash": true,
+  "meta_review_interval": 1,
+  "auto_tag": false
+}
