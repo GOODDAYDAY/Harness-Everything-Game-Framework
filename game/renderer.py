@@ -829,7 +829,7 @@ class VillageRenderer:
                 row, col = PLAYER_HOMES[pos_idx]
 
             # Centre the character sprite in or near the tile
-            sprite = get_character_sprite(idx, alive)
+            sprite = get_character_sprite(idx, player.role, alive)
             x_pos = int(col * TILE_SIZE + (TILE_SIZE - CHAR_W) // 2)
             y_pos = int(row * TILE_SIZE + TILE_SIZE - CHAR_H - 4)
 
