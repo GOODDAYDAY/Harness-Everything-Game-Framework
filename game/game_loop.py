@@ -122,6 +122,7 @@ class WerewolfGame:
         self._ai_current_action: str = ""
 
         # Discussion state
+        self._elapsed_time: float = 0.0
         self._discussion_active: bool = False
         self._discussion_timer: float = 0.0
         self._discussion_interval: float = 3.0
@@ -224,6 +225,10 @@ class WerewolfGame:
         self._menu_option: int = 0
         self._menu_fade_in: float = 0.0
         self._menu_particles: list = []
+
+        # Game over celebration particles
+        self._game_over_particles: list = []
+        self._game_over_particle_time: float = 0.0
 
         # Settings screen state
         self._settings_active: bool = False
@@ -341,6 +346,7 @@ class WerewolfGame:
 
     def _update(self, dt: float) -> None:
         """Main update loop — called by GameEngine each frame."""
+        self._elapsed_time += dt
         if self._main_menu:
             self._update_menu(dt)
             return
@@ -353,6 +359,16 @@ class WerewolfGame:
 
         if self.game_state.game_over:
             self._game_over_timer -= dt
+            # Update celebration particles
+            self._game_over_particle_time += dt
+            for p in self._game_over_particles:
+                p["x"] += p["vx"] * dt
+                p["y"] += p["vy"] * dt
+                p["vy"] += 60.0 * dt  # gravity
+                p["rot"] += p["rot_speed"] * dt
+                p["life"] -= dt
+            # Remove dead particles
+            self._game_over_particles = [p for p in self._game_over_particles if p["life"] > 0]
             return
 
         if self._vote_result_active:
@@ -1002,6 +1018,8 @@ class WerewolfGame:
             # ── Shake on game over ──
             self._shake_intensity = 16.0
             self._shake_timer = 1.0
+
+
             self._shake_style = "quake"
             self._game_over_timer = 0.5
         elif new_phase in (GamePhase.NIGHT_GUARD, GamePhase.NIGHT_SEER,
@@ -1085,11 +1103,18 @@ class WerewolfGame:
         # ── Game over ──
         if self.game_state.game_over and self._game_over_timer <= 0:
             import game.ui_panels as panels
+            # Lazy-init particles (need screen dimensions)
+            if not self._game_over_particles:
+                self._game_over_particles = self._init_game_over_particles(
+                    self.game_state.winner, sw, sh
+                )
             panels.draw_game_over(
                 screen, sw, sh,
                 self.game_state.winner,
                 self._flash_color, self._flash_timer,
                 self._flash_duration, self._flash_active,
+                particles=self._game_over_particles,
+                particle_time=self._game_over_particle_time,
             )
             return
 
@@ -1135,9 +1160,12 @@ class WerewolfGame:
 
         # ── Player list ──
         selected = self._hovered_player
+        speaker_idx = self._current_speaker.index if self._current_speaker else None
         draw_player_list(screen, players, ui_panels.SIDEBAR_X, ui_panels.LIST_START, ui_panels.LIST_SPACING,
                          selected=selected, phase=state.phase,
-                         votes=state.votes if state.phase == GamePhase.DAY_VOTE else None)
+                         votes=state.votes if state.phase == GamePhase.DAY_VOTE else None,
+                         speaking_idx=speaker_idx,
+                         time_s=self._elapsed_time)
 
         # ── Game log ──
         draw_game_log(screen, state.log, ui_panels.SIDEBAR_X, ui_panels.LOG_START_Y, ui_panels.LOG_SPACING)
@@ -1219,6 +1247,35 @@ class WerewolfGame:
                 draw_game_result_panel_wolf_pov(screen, state, ui_panels.SIDEBAR_X, ui_panels.SIDEBAR_W, ui_panels.SCREEN_H)
             else:
                 draw_game_result_panel(screen, state, ui_panels.SIDEBAR_X, ui_panels.SIDEBAR_W, ui_panels.SCREEN_H)
+
+    def _init_game_over_particles(self, winner: str | None, sw: int, sh: int) -> list[dict]:
+        """Create celebration/consolation particles for game over screen."""
+        particles = []
+        rng = random.Random(42)
+        
+        if winner == "werewolf":
+            # Red embers / dark confetti — dramatic
+            colors = [(180, 30, 30), (220, 60, 40), (140, 20, 20), (200, 100, 50)]
+            count = 60
+        else:
+            # Golden sparkles — celebratory
+            colors = [(255, 215, 0), (255, 200, 50), (240, 180, 30), (255, 230, 100)]
+            count = 80
+        
+        for _ in range(count):
+            particles.append({
+                "x": rng.randint(0, sw),
+                "y": rng.randint(-sh // 2, 0),
+                "vx": rng.uniform(-40, 40),
+                "vy": rng.uniform(20, 80),
+                "size": rng.randint(4, 10),
+                "color": rng.choice(colors),
+                "life": rng.uniform(3.0, 8.0),
+                "max_life": 8.0,
+                "rot": rng.uniform(0, 6.28),
+                "rot_speed": rng.uniform(-3.0, 3.0),
+            })
+        return particles
 
     # ──────────────────────────────────────────────
     # Menu update

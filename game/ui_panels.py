@@ -293,10 +293,21 @@ def draw_player_list(
     selected: int | None = None,
     phase: GamePhase | None = None,
     votes: dict | None = None,
+    speaking_idx: int | None = None,
+    time_s: float = 0.0,
 ) -> None:
     """Draw the player list in the sidebar."""
     y = start_y
     for p in players.players:
+        # Speaking glow — animated ring around the currently speaking player
+        if speaking_idx is not None and p.index == speaking_idx and p.alive:
+            glow_alpha = int(80 + 40 * __import__("math").sin(time_s * 4.0))
+            glow_surf = pygame.Surface((x + 400, y + spacing), pygame.SRCALPHA)
+            glow_rect = pygame.Rect(0, 0, x + 400, y + spacing)
+            pygame.draw.rect(glow_surf, (220, 200, 100, glow_alpha),
+                             glow_rect, 2)
+            screen.blit(glow_surf, (0, 0))
+
         # Determine color
         if not p.alive:
             name_color = COLOR_DEAD
@@ -304,6 +315,9 @@ def draw_player_list(
         elif selected is not None and p.index == selected:
             name_color = COLOR_VOTE_HIGHLIGHT
             prefix = "> "
+        elif speaking_idx is not None and p.index == speaking_idx and p.alive:
+            name_color = (255, 230, 140)
+            prefix = "▶ "
         else:
             name_color = COLOR_ALIVE
             prefix = "  "
