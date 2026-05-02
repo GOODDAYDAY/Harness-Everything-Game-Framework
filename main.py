@@ -113,10 +113,11 @@ class WerewolfGame:
         Drives the game loop: starts the game, runs NPC decisions for each
         night and day phase, advances phases on a timer.
         """
-        # ── Update renderer day/night animation ──
+        # ── Update renderer day/night animation and action FX ──
         if self.game_state.phase != GamePhase.SETUP:
             is_day_phase = self.game_state.phase.is_day
             self.renderer.set_day_mode(is_day_phase, dt)
+            self.renderer.update_fx(dt)
         # --- SETUP → start game on first frame ---
         if self.game_state.phase == GamePhase.SETUP and not self._game_started:
             self._game_started = True
@@ -174,6 +175,7 @@ class WerewolfGame:
                         self.game_state.guard_target = target
                         self.game_state.players.get_player(target).protected = True
                         self.game_state._log("guard", f"Guard protected Player {target}.")
+                        self.renderer.show_action(target, self.renderer.FX_SAVE)
             self.game_state.advance_night_phase()
 
         elif phase == GamePhase.NIGHT_SEER:
@@ -189,6 +191,7 @@ class WerewolfGame:
                             "seer",
                             f"Seer investigated Player {target} — they are a {target_player.role.name_zh}."
                         )
+                        self.renderer.show_action(target, self.renderer.FX_SEER)
             self.game_state.advance_night_phase()
 
         elif phase == GamePhase.NIGHT_WEREWOLF:
@@ -199,6 +202,7 @@ class WerewolfGame:
                 if target is not None:
                     self.game_state.werewolf_target = target
                     self.game_state._log("werewolf", f"Werewolves target Player {target}.")
+                    self.renderer.show_action(target, self.renderer.FX_KILL)
             self.game_state.advance_night_phase()
 
         elif phase == GamePhase.NIGHT_WITCH:
@@ -206,8 +210,10 @@ class WerewolfGame:
             if should_save and self.game_state.last_night_victim is not None:
                 self.game_state.witch_heal_target = self.game_state.last_night_victim
                 self.game_state._log("witch", f"Witch saved Player {self.game_state.last_night_victim}.")
+                self.renderer.show_action(self.game_state.last_night_victim, self.renderer.FX_SAVE)
             if should_poison and poison_target is not None:
                 self.game_state.witch_poison_target = poison_target
+                self.renderer.show_action(poison_target, self.renderer.FX_POISON)
                 # Mark the player as poisoned (will be resolved in resolve_night)
                 poisoned_player = self.game_state.players.get_player(poison_target)
                 if poisoned_player:

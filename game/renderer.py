@@ -495,6 +495,12 @@ MEETING_POSITIONS: list[tuple[float, float]] = [
 class VillageRenderer:
     """Renders the pixel-art village background with player characters."""
 
+    # Action feedback types and their visual colours
+    FX_SEER = "seer"       # Blue eye / investigation glow
+    FX_KILL = "kill"       # Red slash / werewolf attack
+    FX_SAVE = "save"       # Green shield / guard or witch protection
+    FX_POISON = "poison"   # Purple skull / witch poison
+
     def __init__(self) -> None:
         self._tile_map = _build_village_map()
         # Pre-generate night and day background surfaces
@@ -507,6 +513,8 @@ class VillageRenderer:
         self._anim_progress: float = 0.0  # 0=all at home, 1=all at meeting
         # Current interpolated positions cache (sub-tile precision)
         self._current_positions: list[tuple[float, float]] = []
+        # Action feedback overlays (player_idx, fx_type, remaining_time)
+        self._action_fx: list[tuple[int, str, float]] = []
 
     def _build_background(self, night: bool) -> pygame.Surface:
         """Build the full background surface from the tile map."""
@@ -569,6 +577,25 @@ class VillageRenderer:
             else:
                 self._current_positions.append((row, col))
 
+    def show_action(self, player_idx: int, fx_type: str, duration: float = 1.0) -> None:
+        """Show a visual feedback effect on a player character.
+
+        Args:
+            player_idx: The player's index.
+            fx_type: One of FX_SEER, FX_KILL, FX_SAVE, FX_POISON.
+            duration: How long the effect is visible (seconds).
+        """
+        self._action_fx.append((player_idx, fx_type, duration))
+
+    def update_fx(self, dt: float) -> None:
+        """Update action feedback timers — decrement and remove expired."""
+        remaining = []
+        for idx, fx_type, timer in self._action_fx:
+            new_timer = timer - dt
+            if new_timer > 0:
+                remaining.append((idx, fx_type, new_timer))
+        self._action_fx = remaining
+
     def render(self, screen: pygame.Surface, night: bool) -> None:
         """Draw the village background and player characters onto the screen."""
         bg = self.get_background(night)
@@ -576,6 +603,46 @@ class VillageRenderer:
 
         # Render player characters on top of the background
         self._render_players(screen, night)
+
+    def _draw_action_fx(self, screen: pygame.Surface, player_idx: int, x_pos: int, y_pos: int) -> None:
+        """Draw action feedback effects on top of a character sprite."""
+        for fx_idx, fx_type, _ in self._action_fx:
+            if fx_idx != player_idx:
+                continue
+            # Effect icon drawn above the character head
+            cx = x_pos + CHAR_W // 2
+            cy = y_pos - 8
+            if fx_type == self.FX_SEER:
+                # Blue glowing eye (diamond shape)
+                pygame.draw.circle(screen, (100, 180, 255), (cx, cy), 6)
+                pygame.draw.circle(screen, (200, 230, 255), (cx, cy), 3)
+                pygame.draw.circle(screen, (255, 255, 255), (cx - 1, cy - 1), 1)
+            elif fx_type == self.FX_KILL:
+                # Red slash marks
+                pygame.draw.line(screen, (255, 60, 60), (cx - 6, cy - 4), (cx + 6, cy + 4), 3)
+                pygame.draw.line(screen, (200, 30, 30), (cx - 5, cy), (cx + 5, cy), 2)
+                # Small red particles
+                for angle in range(0, 360, 45):
+                    import math
+                    px = cx + int(10 * math.cos(math.radians(angle)))
+                    py = cy + int(10 * math.sin(math.radians(angle)))
+                    screen.set_at((px, py), (255, 100, 80))
+            elif fx_type == self.FX_SAVE:
+                # Green shield
+                shield_pts = [(cx, cy - 8), (cx + 6, cy - 4), (cx + 6, cy + 4),
+                              (cx, cy + 8), (cx - 6, cy + 4), (cx - 6, cy - 4)]
+                pygame.draw.polygon(screen, (80, 220, 100), shield_pts)
+                pygame.draw.polygon(screen, (160, 255, 180), shield_pts, 2)
+                # Cross on shield
+                pygame.draw.line(screen, (255, 255, 255), (cx, cy - 4), (cx, cy + 4), 2)
+                pygame.draw.line(screen, (255, 255, 255), (cx - 3, cy), (cx + 3, cy), 2)
+            elif fx_type == self.FX_POISON:
+                # Purple skull
+                pygame.draw.circle(screen, (160, 80, 200), (cx, cy), 5)
+                pygame.draw.circle(screen, (200, 120, 240), (cx, cy), 3)
+                # Eyes
+                screen.set_at((cx - 2, cy - 1), (60, 20, 80))
+                screen.set_at((cx + 2, cy - 1), (60, 20, 80))
 
     def _render_players(self, screen: pygame.Surface, night: bool) -> None:
         """Draw character sprites for all players at their (interpolated) positions.
@@ -610,6 +677,9 @@ class VillageRenderer:
             y_pos = int(row * TILE_SIZE + TILE_SIZE - CHAR_H - 4)
 
             screen.blit(sprite, (x_pos, y_pos))
+
+            # Draw action feedback effects on top
+            self._draw_action_fx(screen, idx, x_pos, y_pos)
 
             # Draw name label below
             if self._font:
