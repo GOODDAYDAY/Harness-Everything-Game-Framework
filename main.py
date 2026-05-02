@@ -16,6 +16,17 @@ from game.roles import Role
 # NPC AI
 from game.npc_ai import choose_night_action, choose_vote_target, decide_witch_action
 
+# Procedural sound effects
+from game.sound import (
+    day_chime,
+    night_chime,
+    kill_sting,
+    vote_bell,
+    vote_result,
+    game_over_victory,
+    game_over_defeat,
+)
+
 # Pixel font size for UI overlay
 FONT_SIZE_TITLE = 28
 FONT_SIZE_PLAYER = 20
@@ -46,6 +57,9 @@ class WerewolfGame:
         self._phase_timer: float = 0.0
         self._phase_duration: float = 1.5  # seconds per phase
         self._game_started: bool = False
+        # Sound state
+        self._prev_phase: GamePhase = GamePhase.SETUP
+        self._sound_played_game_over: bool = False
 
     def init(self):
         if not self.engine.init():
@@ -54,6 +68,12 @@ class WerewolfGame:
         self.engine.on_update = self.update
         # Register state provider for TCP bridge
         self.engine.get_state = lambda: self.game_state.to_dict()
+
+        # Initialise audio mixer (gracefully handles no audio device)
+        try:
+            pygame.mixer.init(frequency=44100, size=-16, channels=2)
+        except pygame.error:
+            pass  # headless / no audio — sounds will be silent
 
         # Load pixel font — fall back to default if unavailable
         try:
@@ -86,8 +106,27 @@ class WerewolfGame:
                 self._phase_timer = 0.0
             return
 
-        # --- GAME OVER — stop advancing ---
+        # ── Sound: detect phase transitions ──
+        current_phase = self.game_state.phase
+        if current_phase != self._prev_phase:
+            if current_phase == GamePhase.GAME_OVER:
+                # Game over sound played in GAME_OVER handling below
+                pass
+            elif current_phase.is_night:
+                night_chime().play() if night_chime() else None
+            elif current_phase.is_day:
+                if current_phase != GamePhase.GAME_OVER:
+                    day_chime().play() if day_chime() else None
+            self._prev_phase = current_phase
+
+        # --- GAME OVER — stop advancing; play sound once ---
         if self.game_state.phase == GamePhase.GAME_OVER:
+            if not self._sound_played_game_over:
+                self._sound_played_game_over = True
+                if self.game_state.winner == "village":
+                    game_over_victory().play() if game_over_victory() else None
+                elif self.game_state.winner == "werewolf":
+                    game_over_defeat().play() if game_over_defeat() else None
             return
 
         # --- Accumulate phase timer ---
@@ -164,6 +203,9 @@ class WerewolfGame:
                         f"Player {victim} ({victim_player.name}) was killed during the night!"
                         f" They were a {victim_player.role.name_zh}."
                     )
+                    kill_sting().play() if kill_sting() else None
+                if poisoned is not None:
+                    kill_sting().play() if kill_sting() else None
                 if saved:
                     self.game_state._log("saved", "Someone was saved by the witch's antidote!")
                 if poisoned is not None:
@@ -194,11 +236,13 @@ class WerewolfGame:
                     target_player = self.game_state.players.get_player(target)
                     if target_player is not None:
                         target_player.voted_by.append(player.index)
+                    vote_bell().play() if vote_bell() else None
             self.game_state.advance_day_phase()
 
         elif phase == GamePhase.DAY_RESULT:
             # Day result already handled by _resolve_day inside advance_day_phase.
             # It may set phase to GAME_OVER — don't duplicate the log.
+            vote_result().play() if vote_result() else None
             self.game_state.advance_day_phase()
 
     @property
