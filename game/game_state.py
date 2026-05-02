@@ -45,6 +45,7 @@ class GameState:
         # Hunter vengeance tracking
         self.hunter_vengeance_target: Optional[int] = None
         self._hunter_vengeance_idx: Optional[int] = None  # Index of the hunter who needs to shoot
+        self._hunter_needs_vengeance: bool = False  # True when a hunter is eliminated and needs to choose a target
 
         # Vote tracking
         self.votes: dict[int, int] = {}  # voter_index -> target_index
@@ -142,7 +143,7 @@ class GameState:
     @property
     def hunter_needs_vengeance(self) -> bool:
         """Check if a hunter has been eliminated and needs to choose a target."""
-        return getattr(self, '_hunter_needs_vengeance', False)
+        return self._hunter_needs_vengeance
 
     def _reset_night_actions(self) -> None:
         """Reset all night action tracking for a new night."""
@@ -156,9 +157,10 @@ class GameState:
         self.hunter_vengeance_target = None
         self.votes = {}
         self.vote_result = None
-        # Reset protection (only lasts one night)
+        # Reset per-night flags on all alive players
         for p in self.players.players:
             p.protected = False
+            p.poisoned = False
 
     def _log(self, event: str, message: str) -> None:
         """Add an entry to the game log."""
