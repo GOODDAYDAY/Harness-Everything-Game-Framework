@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Optional
 
 import pygame
@@ -77,7 +78,7 @@ class WerewolfGame:
             GamePhase.DAY_VOTE: 6.0,
             GamePhase.DAY_RESULT: 3.0,
             GamePhase.GAME_OVER: 6.0,
-            GamePhase.SETUP: 0.5,
+            GamePhase.SETUP: 2.0,
         }
         self._game_started: bool = False
         # Sound state
@@ -101,6 +102,11 @@ class WerewolfGame:
         self._player_click_rects: list[tuple[pygame.Rect, int]] = []
         # Restart state
         self._restart_clicked: bool = False
+        # Main menu state
+        self._main_menu: bool = True
+        self._menu_phase_timer: float = 0.0
+        # Title animation: pulsing glow offset
+        self._title_glow: float = 0.0
 
     def _restart_game(self) -> None:
         """Reset the game state for a new match."""
@@ -136,12 +142,134 @@ class WerewolfGame:
 
         return True
 
+    def _draw_main_menu(self, screen: pygame.Surface) -> None:
+        """Draw the main title screen with atmospheric village background."""
+        # Render the village background in twilight mode (halfway between day/night)
+        # Use a gentle night scene with warm windows
+        is_night_bg = True
+        self.renderer.set_players(self.game_state.players.players)
+        self.renderer.render(screen, is_night_bg, time=self._menu_phase_timer)
+
+        # Dark vignette overlay for readability
+        vignette = pygame.Surface((2560, 1440), pygame.SRCALPHA)
+        # Center radial fade
+        for i in range(20):
+            alpha = max(0, 140 - i * 6)
+            spread = i * 40
+            pygame.draw.rect(
+                vignette, (0, 0, 0, alpha),
+                (spread, spread, 2560 - spread * 2, 1440 - spread * 2),
+            )
+        screen.blit(vignette, (0, 0))
+
+        # Gentle dark overlay on top
+        overlay = pygame.Surface((2560, 1440), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 100))
+        screen.blit(overlay, (0, 0))
+
+        # ── Title Block ──
+        # Decorative line above title
+        line_color = (200, 160, 80)
+        pygame.draw.line(screen, line_color, (400, 200), (2560 - 400, 200), 3)
+        pygame.draw.line(screen, (140, 100, 40), (400, 204), (2560 - 400, 204), 1)
+
+        # Animated title glow
+        glow_intensity = 0.7 + 0.3 * math.sin(self._title_glow * 2.0)
+        glow_r = int(255 * glow_intensity)
+        glow_g = int(200 * glow_intensity)
+        glow_b = int(100 * glow_intensity * 0.6)
+
+        title_text = render_text(
+            "Pixel Werewolf", scale=8,
+            color=(glow_r, glow_g, glow_b),
+            shadow=(80, 50, 10),
+        )
+        tx = (2560 - title_text.get_width()) // 2
+        ty = 280
+        screen.blit(title_text, (tx, ty))
+
+        # Subtitle
+        subtitle = render_text(
+            "A Village of Secrets", scale=3,
+            color=(180, 160, 120),
+            shadow=(40, 30, 10),
+        )
+        sx = (2560 - subtitle.get_width()) // 2
+        screen.blit(subtitle, (sx, ty + title_text.get_height() + 20))
+
+        # Decorative line below subtitle
+        pygame.draw.line(screen, line_color, (600, ty + title_text.get_height() + 60),
+                        (2560 - 600, ty + title_text.get_height() + 60), 2)
+
+        # ── Start Button ──
+        btn_w, btn_h = 360, 64
+        btn_x = (2560 - btn_w) // 2
+        btn_y = 680
+
+        # Button background with pulsing border
+        pulse = 0.85 + 0.15 * math.sin(self._title_glow * 3.0)
+        btn_border = (int(200 * pulse), int(170 * pulse), int(80 * pulse))
+        btn_fill = (50, 40, 25)
+        pygame.draw.rect(screen, btn_fill, (btn_x, btn_y, btn_w, btn_h))
+        pygame.draw.rect(screen, btn_border, (btn_x, btn_y, btn_w, btn_h), 3)
+
+        # Inner highlight
+        pygame.draw.rect(screen, (60, 50, 30), (btn_x + 4, btn_y + 4, btn_w - 8, btn_h - 8))
+
+        btn_text = render_text(
+            "START GAME", scale=4,
+            color=(255, 220, 150),
+            shadow=(60, 40, 10),
+        )
+        bx = btn_x + (btn_w - btn_text.get_width()) // 2
+        by = btn_y + (btn_h - btn_text.get_height()) // 2
+        screen.blit(btn_text, (bx, by))
+
+        # Store button rect for click detection
+        self._menu_start_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+
+        # ── Version / Credits ──
+        credits = render_text(
+            "v1.0  |  12 Players  |  Pixel Art", scale=2,
+            color=(120, 120, 140),
+        )
+        cx = (2560 - credits.get_width()) // 2
+        screen.blit(credits, (cx, 860))
+
+        # ── How to Play hint ──
+        hint = render_text(
+            "Vote during the day to eliminate werewolves. Find them before they find you.", scale=2,
+            color=(140, 140, 160),
+        )
+        hx = (2560 - hint.get_width()) // 2
+        screen.blit(hint, (hx, 920))
+
+        # ── Decorative bottom line ──
+        pygame.draw.line(screen, line_color, (400, 1000), (2560 - 400, 1000), 2)
+        pygame.draw.line(screen, (140, 100, 40), (400, 1004), (2560 - 400, 1004), 1)
+
+        # ── Keyboard hint ──
+        kb_hint = render_text(
+            "[ Press ENTER or click START to begin ]", scale=2,
+            color=(100, 100, 120),
+        )
+        kx = (2560 - kb_hint.get_width()) // 2
+        screen.blit(kb_hint, (kx, 1050))
+
     def update(self, dt: float):
         """Update game state — called every frame by GameEngine.
 
         Drives the game loop: starts the game, runs NPC decisions for each
         night and day phase, advances phases on a timer.
         """
+        # ── Main menu animation ──
+        if self._main_menu:
+            self._menu_phase_timer += dt
+            self._title_glow += dt
+            # Use the renderer to show the village background
+            self.renderer.set_players(self.game_state.players.players)
+            return
+
         # ── Update renderer day/night animation and action FX ──
         if self.game_state.phase != GamePhase.SETUP:
             is_day_phase = self.game_state.phase.is_day
@@ -432,9 +560,29 @@ class WerewolfGame:
 
     def _handle_event(self, event: pygame.event.Event) -> None:
         """Handle input events — mouse clicks on player names in sidebar."""
+        # ── Global keyboard shortcuts ──
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
+                if self._main_menu:
+                    self._start_from_menu()
+                    return
+            # Escape to return to main menu from certain states
+            if event.key == pygame.K_ESCAPE:
+                if self.game_state.phase == GamePhase.GAME_OVER:
+                    self._main_menu = True
+                    self.game_state = GameState()
+                    self._restart_clicked = False
+                    return
+
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mx, my = event.pos
             phase = self.game_state.phase
+
+            # ── Main menu click: start game ──
+            if self._main_menu:
+                if hasattr(self, '_menu_start_rect') and self._menu_start_rect.collidepoint(mx, my):
+                    self._start_from_menu()
+                return
 
             # Role reveal click — advance from SETUP
             if phase == GamePhase.SETUP and not self._role_revealed:
@@ -608,8 +756,32 @@ class WerewolfGame:
         ix = card_x + (card_w - instr_text.get_width()) // 2
         screen.blit(instr_text, (ix, card_y + card_h - 60))
 
+    def _start_from_menu(self) -> None:
+        """Transition from main menu to game."""
+        self._main_menu = False
+        self._menu_phase_timer = 0.0
+        self._title_glow = 0.0
+        self._phase_timer = 0.0
+        self._role_revealed = False
+        self._game_started = False
+        self.game_state = GameState()
+        self.renderer.invalidate_cache()
+        # Reset human state
+        self._human_voted = False
+        self._human_vote_target = None
+        self._human_sheriff_voted = False
+        self._human_sheriff_target = None
+        self._sound_played_game_over = False
+        self._prev_phase = GamePhase.SETUP
+
     def render(self, screen: pygame.Surface):
         state = self.game_state
+
+        # ── MAIN MENU ──
+        if self._main_menu:
+            self._draw_main_menu(screen)
+            return
+
         is_night = self._is_night
 
         # ── 0. Update player positions for renderer ──
