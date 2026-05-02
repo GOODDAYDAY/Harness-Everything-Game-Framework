@@ -60,12 +60,19 @@ class WerewolfGame:
         # Sound state
         self._prev_phase: GamePhase = GamePhase.SETUP
         self._sound_played_game_over: bool = False
+        # Human player interaction state
+        self._human_player_idx: int = 0
+        self._human_voted: bool = False
+        self._human_vote_target: Optional[int] = None
+        # Track clickable player name rectangles in sidebar
+        self._player_click_rects: list[tuple[pygame.Rect, int]] = []
 
     def init(self):
         if not self.engine.init():
             return False
         self.engine.on_render = self.render
         self.engine.on_update = self.update
+        self.engine.on_event = self._handle_event
         # Register state provider for TCP bridge
         self.engine.get_state = lambda: self.game_state.to_dict()
 
@@ -228,8 +235,21 @@ class WerewolfGame:
             self.game_state.advance_day_phase()
 
         elif phase == GamePhase.DAY_VOTE:
+            # Reset human vote state each round
+            if not self._human_voted and self._human_vote_target is None:
+                # First time entering DAY_VOTE this round
+                pass
             alive_players = self.game_state.players.get_alive_players()
+            # Let human player vote first, then NPCs
+            human_player = self.game_state.players.get_player(self._human_player_idx)
+            if human_player and human_player.alive and not self._human_voted:
+                # Wait for human player to click a name
+                return
             for player in alive_players:
+                if player.index == self._human_player_idx and self._human_voted:
+                    continue  # already voted
+                if player.index in self.game_state.votes:
+                    continue  # already voted
                 target = choose_vote_target(self.game_state, player.index)
                 if target is not None:
                     self.game_state.votes[player.index] = target
@@ -242,8 +262,40 @@ class WerewolfGame:
         elif phase == GamePhase.DAY_RESULT:
             # Day result already handled by _resolve_day inside advance_day_phase.
             # It may set phase to GAME_OVER — don't duplicate the log.
+            # Reset human vote state for next round
+            self._human_voted = False
+            self._human_vote_target = None
             vote_result().play() if vote_result() else None
             self.game_state.advance_day_phase()
+
+    def _handle_event(self, event: pygame.event.Event) -> None:
+        """Handle input events — mouse clicks on player names in sidebar."""
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            mx, my = event.pos
+            phase = self.game_state.phase
+            # Only during DAY_VOTE, and only if human hasn't voted yet
+            if phase != GamePhase.DAY_VOTE or self._human_voted:
+                return
+            human = self.game_state.players.get_player(self._human_player_idx)
+            if not human or not human.alive:
+                return
+            for rect, pidx in self._player_click_rects:
+                if rect.collidepoint(mx, my):
+                    # Can't vote for self
+                    if pidx == self._human_player_idx:
+                        return
+                    target_player = self.game_state.players.get_player(pidx)
+                    if target_player and target_player.alive:
+                        self._human_vote_target = pidx
+                        self._human_voted = True
+                        self.game_state.votes[self._human_player_idx] = pidx
+                        target_player.voted_by.append(self._human_player_idx)
+                        # Add log entry
+                        self.game_state._log(
+                            "vote",
+                            f"Player {self._human_player_idx} voted for Player {pidx}."
+                        )
+                    return
 
     @property
     def _is_night(self) -> bool:
@@ -285,9 +337,24 @@ class WerewolfGame:
         )
         screen.blit(day_label, (SIDEBAR_X, SIDEBAR_Y + 68))
 
+        # ── 3b. Click-handling: build player click rects during DAY_VOTE ──
+        self._player_click_rects.clear()
+        if state.phase == GamePhase.DAY_VOTE and self._human_player_idx < len(state.players.players):
+            human = state.players.get_player(self._human_player_idx)
+            if human and human.alive:
+                yy = SIDEBAR_Y + LIST_START
+                for p in state.players.players:
+                    if p.alive and p.index != self._human_player_idx:
+                        click_rect = pygame.Rect(SIDEBAR_X, yy - 2, 320, LIST_SPACING)
+                        self._player_click_rects.append((click_rect, p.index))
+                    yy += LIST_SPACING
+
         # ── 4. Player list (sidebar) ──
         y = SIDEBAR_Y + LIST_START
         for p in state.players.players:
+            # Highlight if this player is selected as human vote target
+            is_human_target = (self._human_vote_target == p.index)
+            
             if p.alive:
                 color = (220, 220, 220)
                 prefix = "🟢"
@@ -297,11 +364,28 @@ class WerewolfGame:
                 prefix = "💀"
                 role_name_label = p.role.name_zh
 
+            # Draw vote-target highlight background
+            if is_human_target:
+                highlight_rect = pygame.Rect(SIDEBAR_X - 4, y - 2, 330, LIST_SPACING - 2)
+                pygame.draw.rect(screen, (60, 50, 20), highlight_rect)
+                pygame.draw.rect(screen, (200, 180, 80), highlight_rect, 2)
+                color = (255, 220, 100)
+            elif p.index == self._human_player_idx:
+                color = (180, 220, 255)  # highlight self in a different colour
+
             sheriff = "★" if p.is_sheriff else ""
             line = player_font.render(
                 f"{prefix} {p.name} {sheriff}[{role_name_label}]", True, color
             )
-            screen.blit(line, (SIDEBAR_X, y))
+            screen.blit(line, (SIDEBAR_X + 4, y))
+            
+            # Show vote count during DAY_VOTE
+            if state.phase == GamePhase.DAY_VOTE and p.alive:
+                votes = sum(1 for v in state.votes.values() if v == p.index)
+                if votes > 0:
+                    vote_surf = player_font.render(f"[{votes}]", True, (255, 180, 80))
+                    screen.blit(vote_surf, (SIDEBAR_X + 280, y))
+
             y += LIST_SPACING
 
         # ── 5. Game log ──
@@ -314,6 +398,21 @@ class WerewolfGame:
             text = log_font.render(entry["message"], True, (160, 160, 160))
             screen.blit(text, (SIDEBAR_X, y))
             y += LOG_SPACING
+
+        # ── 5b. Instruction text (context-aware) ──
+        instr_y = 1400
+        if state.phase == GamePhase.DAY_VOTE and self._human_voted:
+            instr = log_font.render("✓ Vote cast — advancing...", True, (160, 200, 160))
+        elif (state.phase == GamePhase.DAY_VOTE and not self._human_voted
+              and self._human_player_idx < len(state.players.players)
+              and state.players.get_player(self._human_player_idx).alive):
+            instr = log_font.render("Click a name above to cast your vote", True, (255, 200, 100))
+        elif state.phase == GamePhase.GAME_OVER:
+            winner = state.winner or "unknown"
+            instr = log_font.render(f"🏆 Game Over — {winner} team wins!", True, (255, 220, 150))
+        else:
+            instr = log_font.render("Game auto-plays • Watch the story unfold", True, (120, 120, 140))
+        screen.blit(instr, (SIDEBAR_X, instr_y))
 
         # ── 6. Night overlay darkness ──
         if is_night:
