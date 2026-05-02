@@ -85,6 +85,21 @@ class WerewolfGame:
         self._human_vote_target: Optional[int] = None
         # Track clickable player name rectangles in sidebar
         self._player_click_rects: list[tuple[pygame.Rect, int]] = []
+        # Restart state
+        self._restart_clicked: bool = False
+
+    def _restart_game(self) -> None:
+        """Reset the game state for a new match."""
+        self.game_state = GameState()
+        self.game_state.start_game()
+        self._role_revealed = False
+        self._human_voted = False
+        self._human_vote_target = None
+        self._sound_played_game_over = False
+        self._restart_clicked = False
+        self._prev_phase = GamePhase.SETUP
+        if self.game_state.phase != GamePhase.GAME_OVER:
+            self.game_state.advance_night_phase()
 
     def init(self):
         if not self.engine.init():
@@ -139,7 +154,7 @@ class WerewolfGame:
                     day_chime().play() if day_chime() else None
             self._prev_phase = current_phase
 
-        # --- GAME OVER — stop advancing; play sound once ---
+        # --- GAME OVER — wait for restart click ---
         if self.game_state.phase == GamePhase.GAME_OVER:
             if not self._sound_played_game_over:
                 self._sound_played_game_over = True
@@ -147,6 +162,8 @@ class WerewolfGame:
                     game_over_victory().play() if game_over_victory() else None
                 elif self.game_state.winner == "werewolf":
                     game_over_defeat().play() if game_over_defeat() else None
+            if self._restart_clicked:
+                self._restart_game()
             return
 
         # --- Accumulate phase timer ---
@@ -331,6 +348,12 @@ class WerewolfGame:
             # Role reveal click — advance from SETUP
             if phase == GamePhase.SETUP and not self._role_revealed:
                 self._role_revealed = True
+                return
+
+            # Game over — restart click on the right side of the screen
+            if phase == GamePhase.GAME_OVER:
+                if SIDEBAR_X <= mx <= 2560 and 1300 <= my <= 1420:
+                    self._restart_clicked = True
                 return
 
             # Only during DAY_VOTE, and only if human hasn't voted yet
@@ -542,7 +565,11 @@ class WerewolfGame:
                         team_color = (200, 220, 240)  # bluish for villagers
                 else:
                     team_color = (220, 220, 220)  # neutral at night
-                role_name_label = p.role.name_zh if state.phase.is_day else "???"
+                # Reveal roles on game over; hide at night
+                if state.phase == GamePhase.GAME_OVER:
+                    role_name_label = p.role.name_zh
+                else:
+                    role_name_label = p.role.name_zh if state.phase.is_day else "???"
             else:
                 team_color = (80, 80, 80)  # greyed out
                 role_name_label = p.role.name_zh
@@ -630,6 +657,13 @@ class WerewolfGame:
         elif state.phase == GamePhase.GAME_OVER:
             winner = state.winner or "unknown"
             instr = render_text(f"Game Over - {winner} team wins!", scale=FONT_SCALE_PLAYER, color=(255, 220, 150), shadow=(80, 60, 20))
+            restart_instr = render_text("[ Click bottom-right to restart ]", scale=FONT_SCALE_LOG, color=(180, 180, 160))
+            screen.blit(restart_instr, (SIDEBAR_X + 10, instr_y + 40))
+            # Draw a visible restart button area
+            pygame.draw.rect(screen, (80, 55, 30), (SIDEBAR_X, 1300, 660, 120))
+            pygame.draw.rect(screen, (110, 75, 40), (SIDEBAR_X, 1300, 660, 120), 2)
+            restart_btn = render_text("RESTART GAME", scale=FONT_SCALE_PLAYER, color=(220, 200, 160), shadow=(60, 40, 20))
+            screen.blit(restart_btn, (SIDEBAR_X + 200, 1330))
         else:
             instr = render_text("Game auto-plays - Watch the story unfold...", scale=FONT_SCALE_LOG, color=(120, 120, 140))
         screen.blit(instr, (SIDEBAR_X + 10, instr_y))

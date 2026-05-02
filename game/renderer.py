@@ -251,7 +251,9 @@ def _draw_tile(tile_type: int, night: bool) -> pygame.Surface:
         surf.fill(c("grass_light"))
         # Rich grass texture with variation
         import random as _r
-        _r.seed(abs(hash(tile_type * 17 + (7 if night else 31))))
+        # Use a fixed deterministic seed based on tile type and day/night
+        # Avoid hash() which is randomized per-Python-run
+        _r.seed(tile_type * 17 + (7 if night else 31))
         for x in range(0, TILE_SIZE, 4):
             for y in range(0, TILE_SIZE, 4):
                 if (x + y) % 8 == 0:
