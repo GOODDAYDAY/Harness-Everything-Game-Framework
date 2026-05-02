@@ -160,12 +160,13 @@ class WerewolfGame:
         duration = self._phase_durations.get(self.game_state.phase, self._phase_duration)
         if self._phase_timer < duration:
             return
-        self._phase_timer = 0.0
 
         phase = self.game_state.phase
+        timer_expired = True  # flag: phase handler may use to override human-wait
 
         # ── NIGHT PHASES ─────────────────────────────────────────────
         if phase == GamePhase.NIGHT_GUARD:
+            self._phase_timer = 0.0
             guard_players = [p for p in self.game_state.players.players if p.role == Role.GUARD]
             if guard_players:
                 guard = guard_players[0]
@@ -179,6 +180,7 @@ class WerewolfGame:
             self.game_state.advance_night_phase()
 
         elif phase == GamePhase.NIGHT_SEER:
+            self._phase_timer = 0.0
             seer_players = [p for p in self.game_state.players.players if p.role == Role.SEER]
             if seer_players:
                 seer = seer_players[0]
@@ -195,6 +197,7 @@ class WerewolfGame:
             self.game_state.advance_night_phase()
 
         elif phase == GamePhase.NIGHT_WEREWOLF:
+            self._phase_timer = 0.0
             werewolf_players = self.game_state.players.get_werewolf_players()
             alive_ww = [p for p in werewolf_players if p.alive]
             if alive_ww:
@@ -206,6 +209,7 @@ class WerewolfGame:
             self.game_state.advance_night_phase()
 
         elif phase == GamePhase.NIGHT_WITCH:
+            self._phase_timer = 0.0
             should_save, should_poison, poison_target = decide_witch_action(self.game_state)
             if should_save and self.game_state.last_night_victim is not None:
                 self.game_state.witch_heal_target = self.game_state.last_night_victim
@@ -223,6 +227,7 @@ class WerewolfGame:
 
         # ── DAY PHASES ───────────────────────────────────────────────
         elif phase == GamePhase.DAY_ANNOUNCE:
+            self._phase_timer = 0.0
             if self.game_state.werewolf_target is not None:
                 night_result = self.game_state.resolve_night()
                 victim = night_result.get("victim")
@@ -256,20 +261,22 @@ class WerewolfGame:
             self.game_state.advance_day_phase()
 
         elif phase == GamePhase.DAY_DISCUSSION:
+            self._phase_timer = 0.0
             # Discussion phase — placeholder, advances after timer
             self.game_state.advance_day_phase()
 
         elif phase == GamePhase.DAY_VOTE:
-            # Reset human vote state each round
-            if not self._human_voted and self._human_vote_target is None:
-                # First time entering DAY_VOTE this round
-                pass
+            self._phase_timer = 0.0
             alive_players = self.game_state.players.get_alive_players()
-            # Let human player vote first, then NPCs
             human_player = self.game_state.players.get_player(self._human_player_idx)
+            # If human is alive and hasn't voted yet, try to wait for click input.
+            # When timer_expired is True, it means this is the FIRST frame the
+            # timer has elapsed — auto-abstain the human so NPC voting proceeds.
             if human_player and human_player.alive and not self._human_voted:
-                # Wait for human player to click a name
-                return
+                if not timer_expired:
+                    return  # wait for human click within the duration
+                # Timer expired — human abstains this round
+                self._human_voted = True
             for player in alive_players:
                 if player.index == self._human_player_idx and self._human_voted:
                     continue  # already voted
