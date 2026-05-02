@@ -45,10 +45,6 @@ from game.ui_panels import (
     trigger_elimination_highlight,
     update_elimination_timers,
     reset_vote_pulses,
-    draw_main_menu,
-    draw_settings_overlay,
-    draw_role_reveal,
-    draw_game_over,
 )
 from game import ui_panels
 from game.npc_ai import (
@@ -1065,6 +1061,7 @@ class WerewolfGame:
             panels.draw_main_menu(
                 screen, sw, sh,
                 self._menu_option, self._menu_fade_in,
+                particles=self._menu_particles,
             )
             if self._settings_active:
                 # Dim overlay for settings
@@ -1228,5 +1225,42 @@ class WerewolfGame:
     # ──────────────────────────────────────────────
 
     def _update_menu(self, dt: float) -> None:
-        """Update main menu animation."""
+        """Update main menu animation — fade-in + ambient particles."""
         self._menu_fade_in = min(1.0, self._menu_fade_in + 0.5 * dt)
+
+        # Lazy-init particles on first update
+        if not self._menu_particles:
+            rng = random.Random(42)
+            self._menu_particles.clear()
+            for _ in range(30):
+                self._menu_particles.append({
+                    "x": rng.random(),
+                    "y": rng.random() * 0.7 + 0.3,  # mostly upper half
+                    "vx": (rng.random() - 0.5) * 0.02,
+                    "vy": -(rng.random() * 0.03 + 0.01),
+                    "size": rng.random() * 1.5 + 0.5,
+                    "alpha": rng.random() * 0.5 + 0.3,
+                    "phase": rng.random() * 6.28,
+                    "freq": rng.random() * 2.0 + 1.0,
+                    "color": (
+                        int(rng.randint(200, 255)),
+                        int(rng.randint(140, 200)),
+                        int(rng.randint(60, 120)),
+                    ),
+                })
+
+        # Update particles
+        for p in self._menu_particles:
+            p["phase"] += dt * p["freq"]
+            p["x"] += p["vx"] * dt + 0.002 * dt * __import__("math").sin(p["phase"])
+            p["y"] += p["vy"] * dt
+            # Alpha oscillation for gentle breathing
+            p["alpha"] = 0.4 + 0.3 * __import__("math").sin(p["phase"] * 0.5)
+            # Wrap around
+            if p["y"] < -0.05:
+                p["y"] = 1.0 + 0.05
+                p["x"] = __import__("random").random()
+            if p["x"] < -0.05:
+                p["x"] = 1.05
+            elif p["x"] > 1.05:
+                p["x"] = -0.05

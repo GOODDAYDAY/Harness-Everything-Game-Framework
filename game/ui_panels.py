@@ -974,10 +974,32 @@ def get_vote_pulse_alpha(pidx: int) -> float:
 
 
 def draw_main_menu(screen: pygame.Surface, sw: int, sh: int,
-                    menu_option: int, menu_fade_in: float) -> None:
+                    menu_option: int, menu_fade_in: float,
+                    particles: list | None = None) -> None:
     """Draw the main menu screen."""
     from game.bitmap_font import render_text
     from game.text import _
+
+    # ── Particles layer (behind vignette but above gradient) ──
+    if particles:
+        particle_surf = pygame.Surface((sw, sh), pygame.SRCALPHA)
+        for p in particles:
+            px = int(p["x"] * sw)
+            py = int(p["y"] * sh)
+            size = p["size"]
+            alpha = int(p["alpha"] * 180)
+            # Outer glow
+            glow_radius = size * 6
+            color = p["color"]
+            pygame.draw.circle(particle_surf, (*color, alpha // 3),
+                               (px, py), glow_radius + 4)
+            # Inner glow
+            pygame.draw.circle(particle_surf, (*color, alpha // 2),
+                               (px, py), glow_radius)
+            # Core
+            pygame.draw.circle(particle_surf, (255, 255, 255, alpha),
+                               (px, py), max(2, size * 2))
+        screen.blit(particle_surf, (0, 0))
 
     # Background — minimal dark gradient
     for y in range(sh):

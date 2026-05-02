@@ -1005,8 +1005,10 @@ class VillageRenderer:
             # Ease-in-out
             t = t * t * (3.0 - 2.0 * t)  # smoothstep
             if self._bg_blend_surface is None:
+                world_w = GRID_COLS * TILE_SIZE
+                world_h = GRID_ROWS * TILE_SIZE
                 self._bg_blend_surface = pygame.Surface(
-                    (VIEWPORT_W, VIEWPORT_H), pygame.SRCALPHA
+                    (world_w, world_h), pygame.SRCALPHA
                 )
             # Ensure both background caches exist
             if self._bg_day is None:
