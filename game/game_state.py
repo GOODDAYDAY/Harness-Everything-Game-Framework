@@ -285,10 +285,18 @@ class GameState:
 
         result["saved"] = saved or result["saved"]
 
-        # Resolve hunter vengeance if needed (hunter killed at night)
-        if self.hunter_needs_vengeance and (result["victim"] is not None or result["poisoned"] is not None):
-            # Hunter vengeance is resolved in DAY_ANNOUNCE phase in main.py
-            result["hunter_vengeance"] = True
+        # If the witch healed the werewolf's victim, cancel hunter vengeance
+        # (the hunter was revived and shouldn't take vengeance)
+        if result["saved"] and result["victim"] is not None and self.witch_heal_target == result["victim"]:
+            # The night victim was saved by the witch — no vengeance
+            self._hunter_needs_vengeance = False
+            self._hunter_vengeance_idx = None
+            result["hunter_vengeance"] = False
+        else:
+            # Resolve hunter vengeance if needed (hunter killed at night)
+            if self.hunter_needs_vengeance and (result["victim"] is not None or result["poisoned"] is not None):
+                # Hunter vengeance is resolved in DAY_ANNOUNCE phase in main.py
+                result["hunter_vengeance"] = True
 
         self._log("night_resolve", f"Night resolved. Victim: {result.get('victim')}, Saved: {result.get('saved')}")
 
