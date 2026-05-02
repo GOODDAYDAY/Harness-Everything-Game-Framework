@@ -178,6 +178,9 @@ class GameEngine:
             )
 
     def _get_state(self) -> dict[str, Any]:
+        # Allow game to inject its own state provider
+        if hasattr(self, 'get_state') and self.get_state is not None:
+            return self.get_state()
         return {
             "window": [self.width, self.height],
             "fps": self.fps,
