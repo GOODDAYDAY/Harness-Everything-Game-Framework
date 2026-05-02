@@ -28,6 +28,7 @@ class TcpBridge:
         on_screenshot: Callable[[str], bool] | None = None,
         on_input_click: Callable[[float, float, str], None] | None = None,
         on_input_key: Callable[[str, bool], None] | None = None,
+        on_input_motion: Callable[[float, float], None] | None = None,
         on_state: Callable[[], dict[str, Any]] | None = None,
         on_quit: Callable[[], None] | None = None,
         on_record_start: Callable[[int, str], dict[str, Any]] | None = None,
@@ -39,6 +40,7 @@ class TcpBridge:
         self._on_screenshot = on_screenshot
         self._on_input_click = on_input_click
         self._on_input_key = on_input_key
+        self._on_input_motion = on_input_motion
         self._on_state = on_state
         self._on_quit = on_quit
         self._on_record_start = on_record_start
@@ -150,6 +152,14 @@ class TcpBridge:
             pressed = msg.get("pressed", True)
             if self._on_input_key:
                 self._on_input_key(key, bool(pressed))
+                return {"ok": True}
+            return {"ok": False, "error": "input not implemented"}
+
+        if cmd == "input_motion":
+            x = float(msg.get("x", 0))
+            y = float(msg.get("y", 0))
+            if self._on_input_motion:
+                self._on_input_motion(x, y)
                 return {"ok": True}
             return {"ok": False, "error": "input not implemented"}
 

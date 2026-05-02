@@ -82,6 +82,7 @@ class GameEngine:
             on_screenshot=self._take_screenshot,
             on_input_click=self._inject_click,
             on_input_key=self._inject_key,
+            on_input_motion=self._inject_motion,
             on_state=self._get_state,
             on_quit=lambda: setattr(self, "running", False),
             on_record_start=self._start_recording,
@@ -156,17 +157,36 @@ class GameEngine:
             return False
 
     def _inject_click(self, x: float, y: float, button: str = "left") -> None:
+        """Inject a mouse click at (x, y) in harness viewport coordinates (480x270).
+        
+        Coordinates are scaled to match the actual window size.
+        """
         btn_map = {"left": 1, "middle": 2, "right": 3}
         b = btn_map.get(button, 1)
+        w, h = self.screen.get_size()
+        sx = int(x * w / 480.0)
+        sy = int(y * h / 270.0)
         # Pygame needs events in main thread, so queue them
         self._input_queue.append(
-            pygame.event.Event(pygame.MOUSEMOTION, pos=(x, y))
+            pygame.event.Event(pygame.MOUSEMOTION, pos=(sx, sy))
         )
         self._input_queue.append(
-            pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=(x, y), button=b)
+            pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=(sx, sy), button=b)
         )
         self._input_queue.append(
-            pygame.event.Event(pygame.MOUSEBUTTONUP, pos=(x, y), button=b)
+            pygame.event.Event(pygame.MOUSEBUTTONUP, pos=(sx, sy), button=b)
+        )
+
+    def _inject_motion(self, x: float, y: float) -> None:
+        """Inject mouse motion to (x, y) in harness viewport coordinates (480x270).
+        
+        Coordinates are scaled to match the actual window size.
+        """
+        w, h = self.screen.get_size()
+        sx = int(x * w / 480.0)
+        sy = int(y * h / 270.0)
+        self._input_queue.append(
+            pygame.event.Event(pygame.MOUSEMOTION, pos=(sx, sy))
         )
 
     def _inject_key(self, key_name: str, pressed: bool) -> None:
