@@ -25,7 +25,9 @@ from game.npc_ai import (
 
 # Procedural sound effects
 from game.sound import (
+    day_ambience,
     day_chime,
+    night_ambience,
     night_chime,
     kill_sting,
     vote_bell,
@@ -80,6 +82,9 @@ class WerewolfGame:
         self._prev_phase: GamePhase = GamePhase.SETUP
         self._sound_played_game_over: bool = False
         self._role_revealed: bool = False
+        # Ambience state
+        self._ambience_channel: Optional[pygame.mixer.Channel] = None
+        self._current_ambience: str = ""  # "night", "day", or ""
         # Human player interaction state
         self._human_player_idx: int = 0
         self._human_voted: bool = False
@@ -153,6 +158,8 @@ class WerewolfGame:
             elif current_phase.is_day:
                 if current_phase != GamePhase.GAME_OVER:
                     day_chime().play() if day_chime() else None
+            # Update ambience on night↔day transitions
+            self._update_ambience()
             self._prev_phase = current_phase
 
         # --- GAME OVER — wait for restart click ---
@@ -397,6 +404,35 @@ class WerewolfGame:
                             f"Player {self._human_player_idx} voted for Player {pidx}."
                         )
                     return
+
+    def _update_ambience(self) -> None:
+        """Start/stop ambient sound based on current phase."""
+        phase = self.game_state.phase
+        if phase == GamePhase.SETUP:
+            return
+        is_night = phase.is_night
+        desired = "night" if is_night else "day"
+        if desired == self._current_ambience:
+            return
+        # Stop current ambience
+        if self._ambience_channel is not None:
+            self._ambience_channel.stop()
+            self._ambience_channel = None
+        self._current_ambience = ""
+        # Start new ambience
+        try:
+            if is_night:
+                amb = night_ambience()
+            else:
+                amb = day_ambience()
+            if amb:
+                ch = pygame.mixer.find_channel(True)
+                if ch:
+                    ch.play(amb, loops=-1)
+                    self._ambience_channel = ch
+                    self._current_ambience = desired
+        except pygame.error:
+            pass
 
     @property
     def _is_night(self) -> bool:
