@@ -11,6 +11,10 @@ from scripts.game_engine import GameEngine
 from game.game_state import GameState
 from game.phases import GamePhase
 from game.renderer import VillageRenderer
+from game.roles import Role
+
+# NPC AI
+from game.npc_ai import choose_night_action, choose_vote_target, decide_witch_action
 
 # Pixel font size for UI overlay
 FONT_SIZE_TITLE = 28
@@ -38,6 +42,10 @@ class WerewolfGame:
         self._font_title: Optional[pygame.font.Font] = None
         self._font_player: Optional[pygame.font.Font] = None
         self._font_log: Optional[pygame.font.Font] = None
+        # Phase timing (seconds to wait in each phase before auto-advancing)
+        self._phase_timer: float = 0.0
+        self._phase_duration: float = 1.5  # seconds per phase
+        self._game_started: bool = False
 
     def init(self):
         if not self.engine.init():
@@ -60,7 +68,138 @@ class WerewolfGame:
         return True
 
     def update(self, dt: float):
-        pass
+        """Update game state — called every frame by GameEngine.
+
+        Drives the game loop: starts the game, runs NPC decisions for each
+        night and day phase, advances phases on a timer.
+        """
+        # --- SETUP → start game on first frame ---
+        if self.game_state.phase == GamePhase.SETUP and not self._game_started:
+            self._game_started = True
+            self._phase_timer = 0.0
+            return
+
+        if self.game_state.phase == GamePhase.SETUP:
+            self._phase_timer += dt
+            if self._phase_timer >= 0.5:
+                self.game_state.start_game()
+                self._phase_timer = 0.0
+            return
+
+        # --- GAME OVER — stop advancing ---
+        if self.game_state.phase == GamePhase.GAME_OVER:
+            return
+
+        # --- Accumulate phase timer ---
+        self._phase_timer += dt
+        if self._phase_timer < self._phase_duration:
+            return
+        self._phase_timer = 0.0
+
+        phase = self.game_state.phase
+
+        # ── NIGHT PHASES ─────────────────────────────────────────────
+        if phase == GamePhase.NIGHT_GUARD:
+            guard_players = [p for p in self.game_state.players.players if p.role == Role.GUARD]
+            if guard_players:
+                guard = guard_players[0]
+                if guard.alive:
+                    target = choose_night_action(self.game_state, guard.index, phase)
+                    if target is not None:
+                        self.game_state.guard_target = target
+                        self.game_state.players.get_player(target).protected = True
+                        self.game_state._log("guard", f"Guard protected Player {target}.")
+            self.game_state.advance_night_phase()
+
+        elif phase == GamePhase.NIGHT_SEER:
+            seer_players = [p for p in self.game_state.players.players if p.role == Role.SEER]
+            if seer_players:
+                seer = seer_players[0]
+                if seer.alive:
+                    target = choose_night_action(self.game_state, seer.index, phase)
+                    if target is not None:
+                        self.game_state.seer_target = target
+                        target_player = self.game_state.players.get_player(target)
+                        self.game_state._log(
+                            "seer",
+                            f"Seer investigated Player {target} — they are a {target_player.role.name_zh}."
+                        )
+            self.game_state.advance_night_phase()
+
+        elif phase == GamePhase.NIGHT_WEREWOLF:
+            werewolf_players = self.game_state.players.get_werewolf_players()
+            alive_ww = [p for p in werewolf_players if p.alive]
+            if alive_ww:
+                target = choose_night_action(self.game_state, alive_ww[0].index, phase)
+                if target is not None:
+                    self.game_state.werewolf_target = target
+                    self.game_state._log("werewolf", f"Werewolves target Player {target}.")
+            self.game_state.advance_night_phase()
+
+        elif phase == GamePhase.NIGHT_WITCH:
+            should_save, should_poison, poison_target = decide_witch_action(self.game_state)
+            if should_save and self.game_state.last_night_victim is not None:
+                self.game_state.witch_heal_target = self.game_state.last_night_victim
+                self.game_state._log("witch", f"Witch saved Player {self.game_state.last_night_victim}.")
+            if should_poison and poison_target is not None:
+                self.game_state.witch_poison_target = poison_target
+                # Mark the player as poisoned (will be resolved in resolve_night)
+                poisoned_player = self.game_state.players.get_player(poison_target)
+                if poisoned_player:
+                    poisoned_player.poisoned = True
+                self.game_state._log("witch", f"Witch poisoned Player {poison_target}.")
+            self.game_state.advance_night_phase()
+
+        # ── DAY PHASES ───────────────────────────────────────────────
+        elif phase == GamePhase.DAY_ANNOUNCE:
+            if self.game_state.werewolf_target is not None:
+                night_result = self.game_state.resolve_night()
+                victim = night_result.get("victim")
+                saved = night_result.get("saved", False)
+                poisoned = night_result.get("poisoned")
+                if victim is not None and not saved:
+                    victim_player = self.game_state.players.get_player(victim)
+                    self.game_state._log(
+                        "death",
+                        f"Player {victim} ({victim_player.name}) was killed during the night!"
+                        f" They were a {victim_player.role.name_zh}."
+                    )
+                if saved:
+                    self.game_state._log("saved", "Someone was saved by the witch's antidote!")
+                if poisoned is not None:
+                    poisoned_player = self.game_state.players.get_player(poisoned)
+                    self.game_state._log(
+                        "poison",
+                        f"Player {poisoned} ({poisoned_player.name}) was poisoned by the witch!"
+                        f" They were a {poisoned_player.role.name_zh}."
+                    )
+                # Check game over after night kills
+                if self.game_state.players.is_game_over():
+                    self.game_state.winner = self.game_state.players.get_winning_team()
+                    self.game_state.phase = GamePhase.GAME_OVER
+                    self.game_state._log("game_over", f"{self.game_state.winner} team wins!")
+                    return
+            self.game_state.advance_day_phase()
+
+        elif phase == GamePhase.DAY_DISCUSSION:
+            # Discussion phase — placeholder, advances after timer
+            self.game_state.advance_day_phase()
+
+        elif phase == GamePhase.DAY_VOTE:
+            alive_players = self.game_state.players.get_alive_players()
+            for player in alive_players:
+                target = choose_vote_target(self.game_state, player.index)
+                if target is not None:
+                    self.game_state.votes[player.index] = target
+                    target_player = self.game_state.players.get_player(target)
+                    if target_player is not None:
+                        target_player.voted_by.append(player.index)
+            self.game_state.advance_day_phase()
+
+        elif phase == GamePhase.DAY_RESULT:
+            # Day result already handled by _resolve_day inside advance_day_phase.
+            # It may set phase to GAME_OVER — don't duplicate the log.
+            self.game_state.advance_day_phase()
 
     @property
     def _is_night(self) -> bool:
