@@ -654,18 +654,38 @@ class WerewolfGame:
         y += 22
 
         for entry in state.log[-8:]:
-            # Determine log entry colour based on content
+            # Determine log entry colour and prefix icon
             msg = entry["message"]
-            if "witch" in msg or "werewolf" in msg:
-                color = (200, 170, 170)
-            elif "vote" in msg or "lynched" in msg or "hanged" in msg:
+            prefix = None
+            if any(w in msg for w in ["werewolf", "Wolf", "wolf"]):
+                color = (200, 160, 160)
+                prefix = get_role_icon(Role.WEREWOLF)
+            elif any(w in msg for w in ["witch", "Witch"]):
+                color = (200, 170, 200)
+                prefix = get_role_icon(Role.WITCH)
+            elif any(w in msg for w in ["seer", "Seer"]):
+                color = (160, 180, 220)
+                prefix = get_role_icon(Role.SEER)
+            elif any(w in msg for w in ["guard", "Guard"]):
+                color = (160, 200, 220)
+                prefix = get_role_icon(Role.GUARD)
+            elif any(w in msg for w in ["hunter", "Hunter", "shot"]):
+                color = (220, 180, 120)
+                prefix = get_role_icon(Role.HUNTER)
+            elif any(w in msg for w in ["vote", "lynched", "hanged", "accused"]):
                 color = (200, 190, 150)
-            elif "night" in msg:
+            elif any(w in msg for w in ["night", "Night"]):
                 color = (150, 150, 200)
             else:
                 color = (200, 200, 200)
-            text = render_text(msg, scale=FONT_SCALE_LOG, color=color)
-            screen.blit(text, (SIDEBAR_X + 10, y))
+            # Draw role icon prefix if applicable
+            if prefix:
+                screen.blit(prefix, (SIDEBAR_X + 10, y))
+                text = render_text(msg, scale=FONT_SCALE_LOG, color=color)
+                screen.blit(text, (SIDEBAR_X + 28, y))
+            else:
+                text = render_text(msg, scale=FONT_SCALE_LOG, color=color)
+                screen.blit(text, (SIDEBAR_X + 10, y))
             y += LOG_SPACING
 
         # ── 5b. Instruction text (context-aware) ──
