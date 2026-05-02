@@ -1262,7 +1262,7 @@ class WerewolfGame:
             colors = [(255, 215, 0), (255, 200, 50), (240, 180, 30), (255, 230, 100)]
             count = 80
         
-        for _ in range(count):
+        for _i in range(count):
             particles.append({
                 "x": rng.randint(0, sw),
                 "y": rng.randint(-sh // 2, 0),
@@ -1289,7 +1289,7 @@ class WerewolfGame:
         if not self._menu_particles:
             rng = random.Random(42)
             self._menu_particles.clear()
-            for _ in range(30):
+            for _i in range(30):
                 self._menu_particles.append({
                     "x": rng.random(),
                     "y": rng.random() * 0.7 + 0.3,  # mostly upper half

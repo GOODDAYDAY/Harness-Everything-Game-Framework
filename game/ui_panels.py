@@ -1260,10 +1260,32 @@ def draw_role_reveal(screen: pygame.Surface, sw: int, sh: int,
 def draw_game_over(screen: pygame.Surface, sw: int, sh: int,
                    winner: str | None, flash_color: tuple[int, int, int],
                    flash_timer: float, flash_duration: float,
-                   flash_active: bool) -> None:
-    """Draw the game over screen."""
+                   flash_active: bool, *,
+                   particles: list | None = None,
+                   particle_time: float = 0.0) -> None:
+    """Draw the game over screen with celebration particles."""
     from game.bitmap_font import render_text
     from game.text import _
+
+    # ── Draw celebration particles first (behind overlay) ──
+    if particles:
+        for p in particles:
+            x = int(p["x"])
+            y = int(p["y"])
+            size = p["size"]
+            color = p["color"]
+            rot = p["rot"]
+            # Fade out near end of life
+            fade = min(1.0, p["life"] / 1.5) if p["life"] < 1.5 else 1.0
+            alpha = int(255 * fade)
+            # Draw a small rotated rectangle (confetti piece)
+            rect_surf = pygame.Surface((size, size // 2), pygame.SRCALPHA)
+            rect_color = (*color, alpha)
+            rect_surf.fill(rect_color)
+            # Rotate
+            rotated = pygame.transform.rotate(rect_surf, rot * 57.3)  # rad to deg
+            r_rect = rotated.get_rect(center=(x, y))
+            screen.blit(rotated, r_rect)
 
     # Darken
     overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
