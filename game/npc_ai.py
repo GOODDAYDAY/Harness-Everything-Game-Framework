@@ -80,6 +80,32 @@ def choose_vote_target(state: GameState, player_idx: int) -> int | None:
     return random.choice(targets)
 
 
+def choose_sheriff_vote(state: GameState, player_idx: int) -> int | None:
+    """Choose a player to nominate for sheriff during the sheriff election.
+
+    Cannot vote for self. Prefers non-werewolf candidates (simple heuristic).
+    If the voter is a werewolf, they try to vote for another werewolf.
+    """
+    player = state.players.get_player(player_idx)
+    if not player or not player.alive:
+        return None
+    alive = state.players.get_alive_players()
+    # Exclude self
+    valid = [p.index for p in alive if p.index != player_idx]
+    if not valid:
+        return None
+
+    # Werewolves: try to vote for another werewolf
+    if player.role == Role.WEREWOLF:
+        ww_indices = [p.index for p in alive if p.role == Role.WEREWOLF and p.index != player_idx]
+        if ww_indices:
+            return random.choice(ww_indices)
+
+    # Village: vote randomly (avoid werewolves if they had information)
+    # For now, simple random choice (no metagaming)
+    return random.choice(valid)
+
+
 def choose_hunter_vengeance_target(state: GameState, hunter_idx: int) -> int | None:
     """Choose a vengeance target when the Hunter is eliminated.
 

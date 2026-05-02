@@ -32,6 +32,10 @@ class GameState:
         # Night action tracking
         self.guard_target: Optional[int] = None
         self.seer_target: Optional[int] = None
+
+        # Sheriff election tracking
+        self.sheriff_votes: dict[int, int] = {}  # voter_index -> candidate_index
+        self.sheriff_election_done: bool = False  # Only once per game
         self.werewolf_target: Optional[int] = None
         self.witch_heal_target: Optional[int] = None
         self.witch_poison_target: Optional[int] = None
@@ -77,13 +81,32 @@ class GameState:
     def advance_day_phase(self) -> None:
         """Advance to the next day sub-phase."""
         current_idx = DAY_PHASE_ORDER.index(self.phase) if self.phase in DAY_PHASE_ORDER else -1
+
+        # When leaving sheriff election phase, resolve it
+        if self.phase == GamePhase.DAY_SHERIFF_ELECTION:
+            if not self.sheriff_election_done:
+                self._resolve_sheriff_election()
+            # Advance to discussion
+            next_idx = current_idx + 1
+            if next_idx < len(DAY_PHASE_ORDER):
+                self.phase = DAY_PHASE_ORDER[next_idx]
+                self._log("phase", f"Phase changed to {self.phase.display_name}")
+            else:
+                self._resolve_day()
+            return
+
         if current_idx < 0 or current_idx >= len(DAY_PHASE_ORDER) - 1:
             # End of day — resolve, check game over, go to next night
             self._resolve_day()
             if self.players.is_game_over():
                 self.winner = self.players.get_winning_team()
                 self.phase = GamePhase.GAME_OVER
-                self._log("game_over", f"{self.winner} team wins!")
+                winner_display = {
+                    "village": "Village",
+                    "werewolf": "Werewolf",
+                    "town_crier": "Town Crier",
+                }.get(self.winner, self.winner)
+                self._log("game_over", f"{winner_display} wins!")
             else:
                 self.day += 1
                 self.phase = GamePhase.NIGHT_GUARD
@@ -93,15 +116,43 @@ class GameState:
             self.phase = DAY_PHASE_ORDER[current_idx + 1]
             self._log("phase", f"Phase changed to {self.phase.display_name}")
 
+    def _resolve_sheriff_election(self) -> None:
+        """Resolve the sheriff election — the candidate with the most votes becomes sheriff."""
+        if not self.sheriff_votes:
+            self._log("sheriff_election", "No sheriff votes cast. No sheriff elected.")
+            self.sheriff_election_done = True
+            return
+        # Count votes
+        vote_counts: dict[int, int] = {}
+        for candidate in self.sheriff_votes.values():
+            vote_counts[candidate] = vote_counts.get(candidate, 0) + 1
+        # Find max
+        max_votes = max(vote_counts.values())
+        top_candidates = [p for p, v in vote_counts.items() if v == max_votes]
+        if len(top_candidates) == 1:
+            sheriff_idx = top_candidates[0]
+            self.players.get_player(sheriff_idx).is_sheriff = True
+            sheriff_name = self.players.get_player(sheriff_idx).name
+            self._log("sheriff_election", f"{sheriff_name} (Player {sheriff_idx}) is elected Sheriff!")
+        else:
+            self._log("sheriff_election", "Tie between candidates — no sheriff elected.")
+        self.sheriff_election_done = True
+
     def _resolve_day(self) -> None:
         """Resolve day vote — eliminate the most-voted player."""
         if not self.votes:
             self._log("vote", "No votes cast. No one was eliminated.")
             return
-        # Count votes
-        vote_counts: dict[int, int] = {}
-        for target in self.votes.values():
-            vote_counts[target] = vote_counts.get(target, 0) + 1
+        # Count votes (sheriff's vote counts as 1.5)
+        sheriff_idx = None
+        for p in self.players.players:
+            if p.is_sheriff and p.alive:
+                sheriff_idx = p.index
+                break
+        vote_counts: dict[int, float] = {}
+        for voter_idx, target in self.votes.items():
+            weight = 1.5 if voter_idx == sheriff_idx else 1.0
+            vote_counts[target] = vote_counts.get(target, 0.0) + weight
         # Find max
         max_votes = max(vote_counts.values())
         top_targets = [p for p, v in vote_counts.items() if v == max_votes]
@@ -163,6 +214,7 @@ class GameState:
         self.last_night_saved = False
         self.hunter_vengeance_target = None
         self.votes = {}
+        self.sheriff_votes = {}
         self.vote_result = None
         # Reset per-night flags on all alive players
         for p in self.players.players:

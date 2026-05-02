@@ -19,6 +19,7 @@ from game.roles import Role
 from game.npc_ai import (
     choose_hunter_vengeance_target,
     choose_night_action,
+    choose_sheriff_vote,
     choose_vote_target,
     decide_witch_action,
 )
@@ -315,6 +316,19 @@ class WerewolfGame:
 
                 return
             # resolve_night already checked game over — no need to double-check
+            self.game_state.advance_day_phase()
+
+        elif phase == GamePhase.DAY_SHERIFF_ELECTION:
+            self._phase_timer = 0.0
+            # Sheriff election — each alive NPC nominates someone
+            alive_players = self.game_state.players.get_alive_players()
+            for player in alive_players:
+                if player.index in self.game_state.sheriff_votes:
+                    continue  # already voted
+                target = choose_sheriff_vote(self.game_state, player.index)
+                if target is not None:
+                    self.game_state.sheriff_votes[player.index] = target
+                    vote_bell().play() if vote_bell() else None
             self.game_state.advance_day_phase()
 
         elif phase == GamePhase.DAY_DISCUSSION:

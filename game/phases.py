@@ -26,6 +26,7 @@ class GamePhase(Enum):
     NIGHT_WEREWOLF = auto()  # Werewolves choose target
     NIGHT_WITCH = auto()  # Witch decides potions
     DAY_ANNOUNCE = auto()  # Night results announced
+    DAY_SHERIFF_ELECTION = auto()  # Day 1 only: elect a sheriff
     DAY_DISCUSSION = auto()  # Players discuss
     DAY_VOTE = auto()  # Voting phase
     DAY_RESULT = auto()  # Vote result announced
@@ -44,6 +45,7 @@ class GamePhase(Enum):
     def is_day(self) -> bool:
         return self in {
             GamePhase.DAY_ANNOUNCE,
+            GamePhase.DAY_SHERIFF_ELECTION,
             GamePhase.DAY_DISCUSSION,
             GamePhase.DAY_VOTE,
             GamePhase.DAY_RESULT,
@@ -59,6 +61,7 @@ class GamePhase(Enum):
             GamePhase.NIGHT_WEREWOLF: "Night — Werewolves",
             GamePhase.NIGHT_WITCH: "Night — Witch",
             GamePhase.DAY_ANNOUNCE: "Day — Announcement",
+            GamePhase.DAY_SHERIFF_ELECTION: "Day — Sheriff Election",
             GamePhase.DAY_DISCUSSION: "Day — Discussion",
             GamePhase.DAY_VOTE: "Day — Voting",
             GamePhase.DAY_RESULT: "Day — Result",
@@ -78,6 +81,7 @@ NIGHT_PHASE_ORDER: list[GamePhase] = [
 # Order of day phases
 DAY_PHASE_ORDER: list[GamePhase] = [
     GamePhase.DAY_ANNOUNCE,
+    GamePhase.DAY_SHERIFF_ELECTION,
     GamePhase.DAY_DISCUSSION,
     GamePhase.DAY_VOTE,
     GamePhase.DAY_RESULT,
