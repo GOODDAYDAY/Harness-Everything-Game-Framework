@@ -95,6 +95,8 @@ class WerewolfGame:
         self._human_player_idx: int = 0
         self._human_voted: bool = False
         self._human_vote_target: Optional[int] = None
+        self._human_sheriff_voted: bool = False
+        self._human_sheriff_target: Optional[int] = None
         # Track clickable player name rectangles in sidebar
         self._player_click_rects: list[tuple[pygame.Rect, int]] = []
         # Restart state
@@ -107,6 +109,8 @@ class WerewolfGame:
         self._role_revealed = False
         self._human_voted = False
         self._human_vote_target = None
+        self._human_sheriff_voted = False
+        self._human_sheriff_target = None
         self._sound_played_game_over = False
         self._restart_clicked = False
         self._prev_phase = GamePhase.SETUP
@@ -323,13 +327,32 @@ class WerewolfGame:
             self._phase_timer = 0.0
             # Sheriff election — each alive NPC nominates someone
             alive_players = self.game_state.players.get_alive_players()
+            # Handle human player's sheriff vote
+            human_player = self.game_state.players.get_player(self._human_player_idx)
+            if human_player and human_player.alive and not self._human_sheriff_voted:
+                # Wait for human to click a name (handled in _handle_event)
+                # Don't advance yet
+                return
+            # Auto-abstain for dead human
+            if human_player and human_player.alive and self._human_sheriff_voted:
+                pass  # Vote already recorded in _handle_event
+            elif human_player and not human_player.alive:
+                self._human_sheriff_voted = True
+
+            # NPCs vote
             for player in alive_players:
+                if player.index == self._human_player_idx and self._human_sheriff_voted:
+                    continue  # human already voted
                 if player.index in self.game_state.sheriff_votes:
-                    continue  # already voted
+                    continue  # already voted via click
                 target = choose_sheriff_vote(self.game_state, player.index)
                 if target is not None:
                     self.game_state.sheriff_votes[player.index] = target
                     vote_bell().play() if vote_bell() else None
+
+            # Reset for next time and advance
+            self._human_sheriff_voted = False
+            self._human_sheriff_target = None
             self.game_state.advance_day_phase()
 
         elif phase == GamePhase.DAY_DISCUSSION:
@@ -422,6 +445,27 @@ class WerewolfGame:
             if phase == GamePhase.GAME_OVER:
                 if SIDEBAR_X <= mx <= 2560 and 1300 <= my <= 1420:
                     self._restart_clicked = True
+                return
+
+            # Handle sheriff election phase
+            if phase == GamePhase.DAY_SHERIFF_ELECTION and not self._human_sheriff_voted:
+                human = self.game_state.players.get_player(self._human_player_idx)
+                if human and human.alive:
+                    for rect, pidx in self._player_click_rects:
+                        if rect.collidepoint(mx, my):
+                            # Can't vote for self
+                            if pidx == self._human_player_idx:
+                                return
+                            target_player = self.game_state.players.get_player(pidx)
+                            if target_player and target_player.alive:
+                                self._human_sheriff_target = pidx
+                                self._human_sheriff_voted = True
+                                self.game_state.sheriff_votes[self._human_player_idx] = pidx
+                                self.game_state._log(
+                                    "sheriff_election",
+                                    f"{human.name} nominated {target_player.name} for sheriff."
+                                )
+                            return
                 return
 
             # Only during DAY_VOTE, and only if human hasn't voted yet
@@ -649,9 +693,34 @@ class WerewolfGame:
         )
         screen.blit(balance_label, (SIDEBAR_X + 500, SIDEBAR_Y + 48))
 
-        # ── 3b. Click-handling: build player click rects during DAY_VOTE ──
+        # Instruction text for current phase
+        human = state.players.get_player(self._human_player_idx)
+        instr_y = SIDEBAR_Y + 80
+        if state.phase == GamePhase.DAY_SHERIFF_ELECTION:
+            if human and human.alive:
+                if self._human_sheriff_voted:
+                    vote_inst = render_text(
+                        "Nomination recorded — others voting...", scale=FONT_SCALE_LOG,
+                        color=(180, 200, 220)
+                    )
+                else:
+                    vote_inst = render_text(
+                        "Click a player's name to nominate them for Sheriff",
+                        scale=FONT_SCALE_LOG, color=(255, 200, 100)
+                    )
+                screen.blit(vote_inst, (SIDEBAR_X + 10, instr_y))
+        elif state.phase == GamePhase.DAY_VOTE and human and human.alive:
+            if not self._human_voted:
+                vote_inst = render_text(
+                    "Click a player to vote them out",
+                    scale=FONT_SCALE_LOG, color=(255, 200, 100)
+                )
+                screen.blit(vote_inst, (SIDEBAR_X + 10, instr_y))
+
+        # ── 3b. Click-handling: build player click rects during DAY_VOTE or DAY_SHERIFF_ELECTION ──
         self._player_click_rects.clear()
-        if state.phase == GamePhase.DAY_VOTE and self._human_player_idx < len(state.players.players):
+        clickable_phases = (GamePhase.DAY_VOTE, GamePhase.DAY_SHERIFF_ELECTION)
+        if state.phase in clickable_phases and self._human_player_idx < len(state.players.players):
             human = state.players.get_player(self._human_player_idx)
             if human and human.alive:
                 yy = SIDEBAR_Y + LIST_START
@@ -742,6 +811,13 @@ class WerewolfGame:
                 if votes > 0:
                     vote_surf = render_text(f"[{votes}]", scale=FONT_SCALE_PLAYER, color=(255, 180, 80))
                     screen.blit(vote_surf, (SIDEBAR_X + 300, y))
+
+            # Sheriff nomination target highlight during election
+            if (state.phase == GamePhase.DAY_SHERIFF_ELECTION
+                    and p.alive
+                    and p.index == self._human_sheriff_target):
+                nom_surf = render_text("[★]", scale=FONT_SCALE_PLAYER, color=(255, 215, 0))
+                screen.blit(nom_surf, (SIDEBAR_X + 300, y))
 
             y += LIST_SPACING
 

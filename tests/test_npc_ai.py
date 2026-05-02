@@ -99,7 +99,6 @@ class TestNpcAI:
 
     def test_witch_save_probability(self):
         """Witch saves with high probability when werewolf_target set."""
-        ww_idx = self._get_role_idx(Role.WEREWOLF)
         self.gs.werewolf_target = 3  # Someone attacked
         save_count = 0
         for _ in range(100):

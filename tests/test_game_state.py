@@ -6,7 +6,7 @@ sys.path.insert(0, '.')
 
 from game.game_state import GameState
 from game.phases import GamePhase
-from game.roles import Role, Team
+from game.roles import Role
 
 
 class TestGameState:
@@ -152,7 +152,6 @@ class TestGameState:
         """Werewolves win when they equal or outnumber village."""
         self.gs.start_game()
         # Kill all non-wolves except 1
-        wolves = [p for p in self.gs.players.players if p.role == Role.WEREWOLF]
         for p in self.gs.players.players:
             if p.role != Role.WEREWOLF and p.role != Role.TOWN_CRIER:
                 p.alive = False
