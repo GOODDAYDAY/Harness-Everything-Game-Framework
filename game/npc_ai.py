@@ -106,9 +106,11 @@ def decide_witch_action(state: GameState) -> tuple[bool, bool, int | None]:
     if not witch.alive:
         return False, False, None
 
-    # Save: 50% chance to use antidote if someone was killed by werewolves
+    # Save: 50% chance to use antidote if someone was targeted by werewolves
+    # Use werewolf_target (set during NIGHT_WEREWOLF phase) rather than
+    # last_night_victim (which is only set later in resolve_night)
     should_save = False
-    if state.last_night_victim is not None and not state.witch_used_heal:
+    if state.werewolf_target is not None and not state.witch_used_heal:
         should_save = random.random() < 0.5
 
     # Poison: 30% chance to poison a random alive player

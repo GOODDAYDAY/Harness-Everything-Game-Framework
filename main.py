@@ -157,7 +157,6 @@ class WerewolfGame:
             return
 
         phase = self.game_state.phase
-        timer_expired = True  # flag: phase handler may use to override human-wait
 
         # ── NIGHT PHASES ─────────────────────────────────────────────
         if phase == GamePhase.NIGHT_GUARD:
@@ -206,10 +205,10 @@ class WerewolfGame:
         elif phase == GamePhase.NIGHT_WITCH:
             self._phase_timer = 0.0
             should_save, should_poison, poison_target = decide_witch_action(self.game_state)
-            if should_save and self.game_state.last_night_victim is not None:
-                self.game_state.witch_heal_target = self.game_state.last_night_victim
-                self.game_state._log("witch", f"Witch saved Player {self.game_state.last_night_victim}.")
-                self.renderer.show_action(self.game_state.last_night_victim, self.renderer.FX_SAVE)
+            if should_save and self.game_state.werewolf_target is not None:
+                self.game_state.witch_heal_target = self.game_state.werewolf_target
+                self.game_state._log("witch", f"Witch saved Player {self.game_state.werewolf_target}.")
+                self.renderer.show_action(self.game_state.werewolf_target, self.renderer.FX_SAVE)
             if should_poison and poison_target is not None:
                 self.game_state.witch_poison_target = poison_target
                 self.renderer.show_action(poison_target, self.renderer.FX_POISON)
@@ -278,14 +277,11 @@ class WerewolfGame:
             self._phase_timer = 0.0
             alive_players = self.game_state.players.get_alive_players()
             human_player = self.game_state.players.get_player(self._human_player_idx)
-            # If human is alive and hasn't voted yet, try to wait for click input.
-            # When timer_expired is True, it means this is the FIRST frame the
-            # timer has elapsed — auto-abstain the human so NPC voting proceeds.
+            # If human is alive and hasn't voted yet, auto-abstain so NPC voting proceeds.
+            # Human votes are handled via mouse click in _handle_event.
             if human_player and human_player.alive and not self._human_voted:
-                if not timer_expired:
-                    return  # wait for human click within the duration
-                # Timer expired — human abstains this round
                 self._human_voted = True
+                self.game_state._log("vote", f"Human player {self._human_player_idx} abstained.")
             for player in alive_players:
                 if player.index == self._human_player_idx and self._human_voted:
                     continue  # already voted
