@@ -31,8 +31,8 @@ def get_eligible_targets(state: GameState, actor_idx: int, phase: GamePhase) -> 
             # Guard can protect anyone alive (including self)
             return alive_indices
         case GamePhase.NIGHT_SEER:
-            # Seer investigates anyone alive
-            return alive_indices
+            # Seer investigates anyone alive except themselves
+            return [i for i in alive_indices if i != actor_idx]
         case GamePhase.NIGHT_WEREWOLF:
             # Werewolves target anyone alive except fellow werewolves
             werewolves = state.players.get_werewolf_players()
