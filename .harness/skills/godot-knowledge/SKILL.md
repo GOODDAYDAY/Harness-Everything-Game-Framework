@@ -2,7 +2,7 @@
 name: godot-knowledge
 version: 1.0
 description: 提供 Godot GDScript 编程语言和 TSCN 场景文件格式的完整知识库，适用于游戏开发、UI 设计和场景构建。
-auto_load: true
+auto_load: false
 ---
 
 # Godot 开发知识库

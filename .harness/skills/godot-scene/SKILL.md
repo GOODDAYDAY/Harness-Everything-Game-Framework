@@ -1,7 +1,7 @@
 ---
 name: godot-scene-skill
 description: Godot UI与场景开发指南。当用户需要UI和场景开发相关信息时使用。
-auto_load: true
+auto_load: false
 ---
 
 # godot-scene-skill
