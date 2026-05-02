@@ -618,7 +618,43 @@ class WerewolfGame:
         # ── 1. Render village background + player characters ──
         self.renderer.render(screen, is_night)
 
-        # ── 2. Phase transition banner ──
+        # ── 2. Persistent phase indicator badge (top-left of village view) ──
+        # Build a concise phase+day label
+        if state.phase == GamePhase.SETUP:
+            indicator_text = "🌙 Setup"
+        elif state.phase == GamePhase.GAME_OVER:
+            indicator_text = "Game Over"
+        else:
+            # Format: "Day 1 · Voting" or "Night 1 · Werewolves"
+            day_prefix = "Day" if state.phase.is_day else "Night"
+            # Strip the leading "Day — " or "Night — " prefix from display_name
+            raw_short = state.phase.display_name
+            for strip_prefix in ("Day — ", "Night — "):
+                if raw_short.startswith(strip_prefix):
+                    raw_short = raw_short[len(strip_prefix):]
+                    break
+            indicator_text = f"{day_prefix} {state.day} · {raw_short}"
+        indicator_surf = render_text(
+            indicator_text, scale=3,
+            color=(255, 220, 150) if not is_night else (150, 180, 220),
+            shadow=(30, 20, 10) if not is_night else (20, 30, 60),
+        )
+        # Dark background pill
+        padding_x, padding_y = 16, 8
+        pill_w = indicator_surf.get_width() + padding_x * 2
+        pill_h = indicator_surf.get_height() + padding_y * 2
+        pill = pygame.Surface((pill_w, pill_h), pygame.SRCALPHA)
+        pill_bg = (20, 15, 10, 200) if is_night else (30, 25, 15, 200)
+        pill.fill(pill_bg)
+        # Draw rounded-rect corners manually (pixel style)
+        pygame.draw.rect(pill, pill_bg, (0, 0, pill_w, pill_h), border_radius=0)
+        # Thin border
+        border_col = (120, 90, 40) if not is_night else (80, 80, 120)
+        pygame.draw.rect(pill, border_col, (0, 0, pill_w, pill_h), 2)
+        screen.blit(pill, (12, 12))
+        screen.blit(indicator_surf, (12 + padding_x, 12 + padding_y))
+
+        # ── 2b. Phase transition banner ──
         if self._banner_timer > 0:
             banner_text = self._banner_text
             banner_scale = 5
