@@ -115,6 +115,13 @@ class GameState:
                 f"{eliminated_player.name} (Player {eliminated}) was eliminated by vote."
                 f" They were a {eliminated_player.role.name_zh}."
             )
+            # Town Crier win condition: they win if voted out
+            if eliminated_player.role == Role.TOWN_CRIER:
+                self.players.set_town_crier_won()
+                self._log(
+                    "town_crier",
+                    f"{eliminated_player.name} (Town Crier) was voted out — Town Crier wins!"
+                )
             # Hunter vengeance: if the eliminated player is a hunter, trigger their shot
             if eliminated_player.role == Role.HUNTER:
                 self._log("hunter", f"{eliminated_player.name} (Hunter) is taking vengeance!")

@@ -176,6 +176,11 @@ class WerewolfGame:
                     game_over_victory().play() if game_over_victory() else None
                 elif self.game_state.winner == "werewolf":
                     game_over_defeat().play() if game_over_defeat() else None
+                elif self.game_state.winner == "town_crier":
+                    # Use a playful chime for the independent winner
+                    town_crier_chime = night_chime() if night_chime() else None
+                    if town_crier_chime:
+                        town_crier_chime.play()
             if self._restart_clicked:
                 self._restart_game()
             return
@@ -301,7 +306,13 @@ class WerewolfGame:
             if self.game_state.players.is_game_over():
                 self.game_state.winner = self.game_state.players.get_winning_team()
                 self.game_state.phase = GamePhase.GAME_OVER
-                self.game_state._log("game_over", f"{self.game_state.winner} team wins!")
+                winner_display = {
+                    "village": "Village",
+                    "werewolf": "Werewolf",
+                    "town_crier": "Town Crier",
+                }.get(self.game_state.winner, self.game_state.winner)
+                self.game_state._log("game_over", f"{winner_display} team wins!")
+
                 return
             # resolve_night already checked game over — no need to double-check
             self.game_state.advance_day_phase()
@@ -366,7 +377,13 @@ class WerewolfGame:
             if self.game_state.players.is_game_over():
                 self.game_state.winner = self.game_state.players.get_winning_team()
                 self.game_state.phase = GamePhase.GAME_OVER
-                self.game_state._log("game_over", f"{self.game_state.winner} team wins!")
+                winner_display = {
+                    "village": "Village",
+                    "werewolf": "Werewolf",
+                    "town_crier": "Town Crier",
+                }.get(self.game_state.winner, self.game_state.winner)
+                self.game_state._log("game_over", f"{winner_display} team wins!")
+
             else:
                 # Advance to night
                 self.game_state.day += 1
@@ -767,7 +784,12 @@ class WerewolfGame:
             instr = render_text("Click a villager name above to cast your vote", scale=FONT_SCALE_LOG, color=(255, 200, 100))
         elif state.phase == GamePhase.GAME_OVER:
             winner = state.winner or "unknown"
-            instr = render_text(f"Game Over - {winner} team wins!", scale=FONT_SCALE_PLAYER, color=(255, 220, 150), shadow=(80, 60, 20))
+            winner_display = {
+                "village": "Village",
+                "werewolf": "Werewolf",
+                "town_crier": "Town Crier",
+            }.get(winner, winner)
+            instr = render_text(f"Game Over - {winner_display} wins!", scale=FONT_SCALE_PLAYER, color=(255, 220, 150), shadow=(80, 60, 20))
             restart_instr = render_text("[ Click bottom-right to restart ]", scale=FONT_SCALE_LOG, color=(180, 180, 160))
             screen.blit(restart_instr, (SIDEBAR_X + 10, instr_y + 40))
             # Draw a visible restart button area

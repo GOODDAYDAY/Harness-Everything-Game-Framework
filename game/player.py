@@ -35,6 +35,7 @@ class PlayerManager:
 
     def __init__(self, roles: list[Role]):
         self.players: list[Player] = []
+        self._town_crier_won: bool = False
         self._assign_roles(roles)
 
     def _assign_roles(self, roles: list[Role]) -> None:
@@ -74,8 +75,21 @@ class PlayerManager:
         if player and player.alive:
             player.alive = False
 
+    @property
+    def town_crier_won(self) -> bool:
+        """Check if the Town Crier (independent) has achieved their win condition.
+        The Town Crier wins if they were voted out during a day phase.
+        This is set by game state when a town crier is eliminated by vote."""
+        return self._town_crier_won
+
+    def set_town_crier_won(self) -> None:
+        self._town_crier_won = True
+
     def is_game_over(self) -> bool:
         """Check win/loss conditions."""
+        # Town Crier independent win takes priority
+        if self._town_crier_won:
+            return True
         alive_village = len(self.get_team_players(Team.VILLAGE))
         alive_wolves = len(self.get_team_players(Team.WEREWOLF))
         # Werewolves win if they equal or outnumber village
@@ -87,6 +101,8 @@ class PlayerManager:
 
     def get_winning_team(self) -> Optional[str]:
         """Return the winning team name or None if game not over."""
+        if self._town_crier_won:
+            return "town_crier"
         alive_village = len(self.get_team_players(Team.VILLAGE))
         alive_wolves = len(self.get_team_players(Team.WEREWOLF))
         if alive_wolves == 0:
