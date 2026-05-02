@@ -1,7 +1,7 @@
 ---
 name: godot-gdscript-grammar
 description: Godot GDScript语法详解。当用户需要GDScript语法相关信息时使用。
-auto_load: true
+auto_load: false
 ---
 
 # godot-gdscript-grammar
