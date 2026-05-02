@@ -987,6 +987,9 @@ class WerewolfGame:
                 self_highlight = pygame.Rect(SIDEBAR_X + 4, y - 2, 400, LIST_SPACING - 2)
                 pygame.draw.rect(screen, (30, 40, 60), self_highlight)
                 team_color = (180, 220, 255)
+                # Add "You" indicator
+                you_surf = render_text(">", scale=FONT_SCALE_PLAYER, color=(255, 220, 100))
+                screen.blit(you_surf, (SIDEBAR_X - 14, y))
 
             # Pixel-art role icon (or skull for dead)
             if p.alive:
