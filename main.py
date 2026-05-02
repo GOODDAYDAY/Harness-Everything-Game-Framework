@@ -55,7 +55,20 @@ class WerewolfGame:
         self._font_log: Optional[pygame.font.Font] = None
         # Phase timing (seconds to wait in each phase before auto-advancing)
         self._phase_timer: float = 0.0
-        self._phase_duration: float = 1.5  # seconds per phase
+        self._phase_duration: float = 1.5  # fallback seconds per phase
+        # Per-phase durations for readable pacing
+        self._phase_durations: dict[GamePhase, float] = {
+            GamePhase.NIGHT_GUARD: 2.0,
+            GamePhase.NIGHT_SEER: 2.5,
+            GamePhase.NIGHT_WEREWOLF: 3.0,
+            GamePhase.NIGHT_WITCH: 2.0,
+            GamePhase.DAY_ANNOUNCE: 3.0,
+            GamePhase.DAY_DISCUSSION: 5.0,
+            GamePhase.DAY_VOTE: 6.0,
+            GamePhase.DAY_RESULT: 3.0,
+            GamePhase.GAME_OVER: 6.0,
+            GamePhase.SETUP: 0.5,
+        }
         self._game_started: bool = False
         # Sound state
         self._prev_phase: GamePhase = GamePhase.SETUP
@@ -142,7 +155,9 @@ class WerewolfGame:
 
         # --- Accumulate phase timer ---
         self._phase_timer += dt
-        if self._phase_timer < self._phase_duration:
+        # Use per-phase duration if available, otherwise fallback
+        duration = self._phase_durations.get(self.game_state.phase, self._phase_duration)
+        if self._phase_timer < duration:
             return
         self._phase_timer = 0.0
 
