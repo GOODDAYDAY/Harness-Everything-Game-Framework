@@ -14,7 +14,12 @@ from game.renderer import VillageRenderer
 from game.roles import Role
 
 # NPC AI
-from game.npc_ai import choose_night_action, choose_vote_target, decide_witch_action
+from game.npc_ai import (
+    choose_hunter_vengeance_target,
+    choose_night_action,
+    choose_vote_target,
+    decide_witch_action,
+)
 
 # Procedural sound effects
 from game.sound import (
@@ -252,6 +257,20 @@ class WerewolfGame:
                         f"Player {poisoned} ({poisoned_player.name}) was poisoned by the witch!"
                         f" They were a {poisoned_player.role.name_zh}."
                     )
+                # Hunter vengeance for night kills
+                if self.game_state.hunter_needs_vengeance:
+                    hunter_idx = self.game_state._hunter_vengeance_idx
+                    hunter_target = choose_hunter_vengeance_target(
+                        self.game_state, hunter_idx
+                    )
+                    if hunter_target is not None:
+                        self.game_state.resolve_hunter_vengeance(hunter_target)
+                        hunter_victim = self.game_state.players.get_player(hunter_target)
+                        self.game_state._log(
+                            "elimination",
+                            f"Player {hunter_target} ({hunter_victim.name}) was shot by the Hunter's vengeance!"
+                        )
+                        kill_sting().play() if kill_sting() else None
                 # Check game over after night kills
                 if self.game_state.players.is_game_over():
                     self.game_state.winner = self.game_state.players.get_winning_team()
@@ -294,10 +313,27 @@ class WerewolfGame:
         elif phase == GamePhase.DAY_RESULT:
             # Day result already handled by _resolve_day inside advance_day_phase.
             # It may set phase to GAME_OVER — don't duplicate the log.
+
             # Reset human vote state for next round
             self._human_voted = False
             self._human_vote_target = None
             vote_result().play() if vote_result() else None
+
+            # Hunter vengeance for vote elimination
+            if self.game_state.hunter_needs_vengeance:
+                hunter_idx = self.game_state._hunter_vengeance_idx
+                hunter_target = choose_hunter_vengeance_target(
+                    self.game_state, hunter_idx
+                )
+                if hunter_target is not None:
+                    self.game_state.resolve_hunter_vengeance(hunter_target)
+                    hunter_victim = self.game_state.players.get_player(hunter_target)
+                    self.game_state._log(
+                        "elimination",
+                        f"Player {hunter_target} ({hunter_victim.name}) was shot by the Hunter's vengeance!"
+                    )
+                    kill_sting().play() if kill_sting() else None
+
             self.game_state.advance_day_phase()
 
     def _handle_event(self, event: pygame.event.Event) -> None:

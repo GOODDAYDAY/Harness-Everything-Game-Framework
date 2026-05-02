@@ -80,6 +80,19 @@ def choose_vote_target(state: GameState, player_idx: int) -> int | None:
     return random.choice(targets)
 
 
+def choose_hunter_vengeance_target(state: GameState, hunter_idx: int) -> int | None:
+    """Choose a vengeance target when the Hunter is eliminated.
+
+    The hunter shoots one other alive player. Returns target index or None.
+    """
+    # The hunter is already dead — find other alive players
+    alive = state.players.get_alive_players()
+    valid = [p.index for p in alive if p.index != hunter_idx]
+    if not valid:
+        return None
+    return random.choice(valid)
+
+
 def decide_witch_action(state: GameState) -> tuple[bool, bool, int | None]:
     """Decide witch NPC actions.
 

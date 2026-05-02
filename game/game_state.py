@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Optional
-from game.roles import ROSTER_12_PLAYER
+from game.roles import ROSTER_12_PLAYER, Role
 from game.player import PlayerManager
 from game.phases import (
     GamePhase,
@@ -41,6 +41,10 @@ class GameState:
         # Night result tracking
         self.last_night_victim: Optional[int] = None
         self.last_night_saved: bool = False
+
+        # Hunter vengeance tracking
+        self.hunter_vengeance_target: Optional[int] = None
+        self._hunter_vengeance_idx: Optional[int] = None  # Index of the hunter who needs to shoot
 
         # Vote tracking
         self.votes: dict[int, int] = {}  # voter_index -> target_index
@@ -110,8 +114,35 @@ class GameState:
                 f"{eliminated_player.name} (Player {eliminated}) was eliminated by vote."
                 f" They were a {eliminated_player.role.name_zh}."
             )
+            # Hunter vengeance: if the eliminated player is a hunter, trigger their shot
+            if eliminated_player.role == Role.HUNTER:
+                self._log("hunter", f"{eliminated_player.name} (Hunter) is taking vengeance!")
+                self._hunter_needs_vengeance = True
+                self._hunter_vengeance_idx = eliminated
         else:
             self._log("vote", "Tie vote — no one was eliminated.")
+
+    def resolve_hunter_vengeance(self, target_idx: Optional[int]) -> None:
+        """Resolve hunter's vengeance — kill the target player.
+
+        If target_idx is None, the hunter has no valid target (e.g. no other alive players).
+        """
+        if target_idx is not None:
+            self.players.kill_player(target_idx)
+            target_player = self.players.get_player(target_idx)
+            self._log(
+                "elimination",
+                f"{target_player.name} (Player {target_idx}) was shot by the Hunter's vengeance!"
+            )
+        else:
+            self._log("hunter", "The Hunter has no valid vengeance target.")
+        self._hunter_needs_vengeance = False
+        self._hunter_vengeance_idx = None
+
+    @property
+    def hunter_needs_vengeance(self) -> bool:
+        """Check if a hunter has been eliminated and needs to choose a target."""
+        return getattr(self, '_hunter_needs_vengeance', False)
 
     def _reset_night_actions(self) -> None:
         """Reset all night action tracking for a new night."""
@@ -122,6 +153,7 @@ class GameState:
         self.witch_poison_target = None
         self.last_night_victim = None
         self.last_night_saved = False
+        self.hunter_vengeance_target = None
         self.votes = {}
         self.vote_result = None
         # Reset protection (only lasts one night)
@@ -147,6 +179,8 @@ class GameState:
             "saved": False,
             "victim": None,
             "poisoned": None,
+            "hunter_vengeance": False,
+            "hunter_victim": None,
         }
 
         # Determine if the werewolf target is protected by guard
@@ -160,6 +194,11 @@ class GameState:
                 self.players.kill_player(self.werewolf_target)
                 self.last_night_victim = self.werewolf_target
                 result["victim"] = self.werewolf_target
+                # Check if the victim was a hunter
+                if target_player.role == Role.HUNTER:
+                    self._hunter_needs_vengeance = True
+                    self._hunter_vengeance_idx = self.werewolf_target
+                    self._log("hunter", f"{target_player.name} (Hunter) was killed — taking vengeance!")
 
         # Witch heal
         if self.witch_heal_target is not None and not self.witch_used_heal:
@@ -176,8 +215,19 @@ class GameState:
             self.players.kill_player(self.witch_poison_target)
             result["poisoned"] = self.witch_poison_target
             self.witch_used_poison = True
+            # Check if the poisoned player was a hunter
+            poisoned_player = self.players.get_player(self.witch_poison_target)
+            if poisoned_player and poisoned_player.role == Role.HUNTER:
+                self._hunter_needs_vengeance = True
+                self._hunter_vengeance_idx = self.witch_poison_target
+                self._log("hunter", f"{poisoned_player.name} (Hunter) was poisoned — taking vengeance!")
 
         result["saved"] = saved or result["saved"]
+
+        # Resolve hunter vengeance if needed (hunter killed at night)
+        if self.hunter_needs_vengeance and result["victim"] is not None:
+            # Hunter vengeance is resolved in DAY_ANNOUNCE phase in main.py
+            result["hunter_vengeance"] = True
 
         self._log("night_resolve", f"Night resolved. Victim: {result.get('victim')}, Saved: {result.get('saved')}")
 
