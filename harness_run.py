@@ -48,7 +48,7 @@ def main():
         agent_cfg.max_cycles = args.cycles
 
     print("=" * 60)
-    print(f"  Pixel Werewolf — Harness Agent (Python)")
+    print("  Pixel Werewolf — Harness Agent (Python)")
     print(f"  model     = {agent_cfg.harness.model}")
     print(f"  workspace = {agent_cfg.harness.workspace}")
     print(f"  max_cycles= {agent_cfg.max_cycles}")
