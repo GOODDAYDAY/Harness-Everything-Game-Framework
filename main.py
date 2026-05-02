@@ -78,6 +78,7 @@ class WerewolfGame:
         # Sound state
         self._prev_phase: GamePhase = GamePhase.SETUP
         self._sound_played_game_over: bool = False
+        self._role_revealed: bool = False
         # Human player interaction state
         self._human_player_idx: int = 0
         self._human_voted: bool = False
@@ -115,18 +116,16 @@ class WerewolfGame:
             is_day_phase = self.game_state.phase.is_day
             self.renderer.set_day_mode(is_day_phase, dt)
             self.renderer.update_fx(dt)
-        # --- SETUP → start game on first frame ---
-        if self.game_state.phase == GamePhase.SETUP and not self._game_started:
-            self._game_started = True
-            self._phase_timer = 0.0
-            return
-
+        # --- SETUP → wait for role reveal click ---
         if self.game_state.phase == GamePhase.SETUP:
-            self._phase_timer += dt
-            if self._phase_timer >= 0.5:
-                self.game_state.start_game()
+            if not self._role_revealed:
+                return  # wait for human to click the role card
+            if not self._game_started:
+                self._game_started = True
                 self._phase_timer = 0.0
-            return
+                return
+            # If we get here, _role_revealed is True but start_game not called yet
+            # -> handled below as a timer fallback
 
         # ── Sound: detect phase transitions ──
         current_phase = self.game_state.phase
@@ -140,6 +139,16 @@ class WerewolfGame:
                 if current_phase != GamePhase.GAME_OVER:
                     day_chime().play() if day_chime() else None
             self._prev_phase = current_phase
+
+        # --- SETUP — pause for role reveal then start game ---
+        if self.game_state.phase == GamePhase.SETUP:
+            if not self._role_revealed:
+                return  # wait for human to click the role card
+            if not self._game_started:
+                self._game_started = True
+                self.game_state.start_game()
+                self._phase_timer = 0.0
+            return
 
         # --- GAME OVER — stop advancing; play sound once ---
         if self.game_state.phase == GamePhase.GAME_OVER:
@@ -333,6 +342,12 @@ class WerewolfGame:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mx, my = event.pos
             phase = self.game_state.phase
+
+            # Role reveal click — advance from SETUP
+            if phase == GamePhase.SETUP and not self._role_revealed:
+                self._role_revealed = True
+                return
+
             # Only during DAY_VOTE, and only if human hasn't voted yet
             if phase != GamePhase.DAY_VOTE or self._human_voted:
                 return
@@ -362,6 +377,83 @@ class WerewolfGame:
         """Whether the current phase is a night phase (darker visuals)."""
         return self.game_state.phase.is_night or self.game_state.phase == GamePhase.SETUP
 
+    def _draw_role_reveal(self, screen: pygame.Surface, state):
+        """Draw the role-reveal card at game start."""
+        human = state.players.get_player(self._human_player_idx)
+        if human is None:
+            return
+
+        # Large centered card
+        card_w = 800
+        card_h = 500
+        card_x = (2560 - card_w) // 2
+        card_y = (1440 - card_h) // 2
+
+        # Card background with border
+        card = pygame.Surface((card_w, card_h))
+        card.fill((40, 30, 20))
+        # Border glow
+        pygame.draw.rect(card, (200, 160, 80), (0, 0, card_w, card_h), 4)
+        screen.blit(card, (card_x, card_y))
+
+        # Role icon area (decorative)
+        icon_x = card_x + 40
+        icon_y = card_y + 40
+        icon_w = 120
+        icon_h = 120
+        pygame.draw.rect(screen, (80, 60, 40), (icon_x, icon_y, icon_w, icon_h))
+        pygame.draw.rect(screen, (160, 120, 60), (icon_x, icon_y, icon_w, icon_h), 2)
+
+        # Role name
+        role_text = render_text(
+            human.role.name.capitalize(),
+            scale=5, color=(255, 200, 100), shadow=(80, 50, 10)
+        )
+        rx = icon_x + (icon_w - role_text.get_width()) // 2
+        ry = icon_y + (icon_h - role_text.get_height()) // 2
+        screen.blit(role_text, (rx, ry))
+
+        # Role title
+        title_text = render_text(
+            "Your Role",
+            scale=4, color=(200, 180, 140), shadow=(40, 30, 10)
+        )
+        screen.blit(title_text, (card_x + 200, card_y + 50))
+
+        # Role description
+        desc = human.role.description
+        desc_text = render_text(
+            desc,
+            scale=2, color=(200, 200, 200), shadow=(20, 20, 20)
+        )
+        screen.blit(desc_text, (card_x + 200, card_y + 110))
+
+        # Team info
+        team_colors = {}
+        try:
+            from game.roles import Team
+            team_colors = {
+                Team.VILLAGE: (140, 200, 140),
+                Team.WEREWOLF: (200, 100, 100),
+                Team.INDEPENDENT: (200, 180, 100),
+            }
+        except ImportError:
+            pass
+        team_color = team_colors.get(human.role.team, (200, 200, 200)) if hasattr(human.role, 'team') else (200, 200, 200)
+        team_text = render_text(
+            f"Team: {human.role.team.name.capitalize()}" if hasattr(human.role, 'team') and human.role.team else "",
+            scale=2, color=team_color, shadow=(20, 20, 20)
+        )
+        screen.blit(team_text, (card_x + 200, card_y + 170))
+
+        # Instruction
+        instr_text = render_text(
+            "[ Click anywhere to start ]",
+            scale=2, color=(160, 160, 200), shadow=(20, 20, 40)
+        )
+        ix = card_x + (card_w - instr_text.get_width()) // 2
+        screen.blit(instr_text, (ix, card_y + card_h - 60))
+
     def render(self, screen: pygame.Surface):
         state = self.game_state
         is_night = self._is_night
@@ -376,6 +468,11 @@ class WerewolfGame:
         overlay = pygame.Surface((640, 1440), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 160) if is_night else (0, 0, 0, 100))
         screen.blit(overlay, (SIDEBAR_X - 20, 0))
+
+        # ── ROLE REVEAL CARD (SETUP phase) ──
+        if state.phase == GamePhase.SETUP and not self._role_revealed:
+            self._draw_role_reveal(screen, state)
+            return
 
         # ── 3. Title / phase info ──
         title_text = render_text(
