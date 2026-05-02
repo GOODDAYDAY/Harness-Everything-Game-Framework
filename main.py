@@ -8,6 +8,7 @@ from typing import Optional
 import pygame
 
 from game.bitmap_font import render_text
+from game.role_icons import get_role_icon, ICON_DEAD, ICON_SHERIFF
 from scripts.game_engine import GameEngine
 from game.game_state import GameState
 from game.phases import GamePhase
@@ -568,68 +569,72 @@ class WerewolfGame:
 
         # ── 4. Player list (sidebar) ──
         y = SIDEBAR_Y + LIST_START
+        from game.roles import Team
         for p in state.players.players:
-            # Highlight if this player is selected as human vote target
             is_human_target = (self._human_vote_target == p.index)
-            
-            if p.alive:
-                # Colour-code by team (visible only during day)
-                from game.roles import Team
-                if state.phase.is_day:
-                    if p.role.team == Team.WEREWOLF:
-                        team_color = (255, 160, 160)  # reddish for werewolves
-                    else:
-                        team_color = (200, 220, 240)  # bluish for villagers
-                else:
-                    team_color = (220, 220, 220)  # neutral at night
-                # Reveal roles on game over; hide at night
-                if state.phase == GamePhase.GAME_OVER:
-                    role_name_label = p.role.name_zh
-                else:
-                    role_name_label = p.role.name_zh if state.phase.is_day else "???"
-            else:
-                team_color = (80, 80, 80)  # greyed out
-                role_name_label = p.role.name_zh
 
-            # Draw vote-target highlight background
+            # Determine team colour and faction bar colour
+            if p.alive:
+                if state.phase.is_day or state.phase == GamePhase.GAME_OVER:
+                    if p.role.team == Team.WEREWOLF:
+                        team_color = (255, 160, 160)
+                        faction_bar_col = (200, 50, 50)
+                    elif p.role.team == Team.INDEPENDENT:
+                        team_color = (255, 220, 100)
+                        faction_bar_col = (200, 180, 60)
+                    else:
+                        team_color = (200, 220, 240)
+                        faction_bar_col = (60, 140, 200)
+                else:
+                    team_color = (220, 220, 220)
+                    faction_bar_col = (100, 100, 100)
+            else:
+                team_color = (80, 80, 80)
+                faction_bar_col = (50, 50, 50)
+
+            show_role = (p.alive and state.phase.is_day) or state.phase == GamePhase.GAME_OVER or not p.alive
+
+            # Faction colour bar on left edge
+            bar_rect = pygame.Rect(SIDEBAR_X, y - 2, 4, LIST_SPACING - 2)
+            pygame.draw.rect(screen, faction_bar_col, bar_rect)
+
+            # Vote-target highlight
             if is_human_target:
                 highlight_rect = pygame.Rect(SIDEBAR_X + 4, y - 2, 400, LIST_SPACING - 2)
                 pygame.draw.rect(screen, (60, 50, 20), highlight_rect)
                 pygame.draw.rect(screen, (200, 180, 80), highlight_rect, 2)
                 team_color = (255, 220, 100)
             elif p.index == self._human_player_idx:
-                # Subtle self-highlight
                 self_highlight = pygame.Rect(SIDEBAR_X + 4, y - 2, 400, LIST_SPACING - 2)
                 pygame.draw.rect(screen, (30, 40, 60), self_highlight)
-                team_color = (180, 220, 255)  # blue self highlight
+                team_color = (180, 220, 255)
 
-            # Alive indicator dot
+            # Pixel-art role icon (or skull for dead)
             if p.alive:
-                dot_color = (100, 255, 100)  # green dot
+                screen.blit(get_role_icon(p.role), (SIDEBAR_X + 8, y + 4))
             else:
-                dot_color = (200, 50, 50)  # red dot
-            pygame.draw.circle(screen, dot_color, (SIDEBAR_X + 12, y + 10), 4)
+                screen.blit(ICON_DEAD, (SIDEBAR_X + 8, y + 4))
 
-            # Format: name + role + sheriff badge
-            name_part = p.name[:12]  # Truncate long names
+            # Player name
+            name_part = p.name[:12]
+            name_x = SIDEBAR_X + 30
+            line = render_text(name_part, scale=FONT_SCALE_PLAYER, color=team_color)
+            screen.blit(line, (name_x, y))
+
+            # Sheriff badge (pixel art)
             if p.is_sheriff:
-                sheriff_badge = render_text("[S]", scale=FONT_SCALE_SMALL, color=(255, 200, 80))
-                screen.blit(sheriff_badge, (SIDEBAR_X + 22, y + 2))
-            
-            line = render_text(
-                f"{name_part}",
-                scale=FONT_SCALE_PLAYER, color=team_color
-            )
-            screen.blit(line, (SIDEBAR_X + 46, y))
-            
+                screen.blit(ICON_SHERIFF, (name_x + len(name_part) * 10 + 4, y + 1))
+
             # Role label (right side)
-            role_label = render_text(
-                f"[{role_name_label}]", scale=FONT_SCALE_SMALL,
-                color=(140, 180, 140) if p.alive else (80, 80, 80)
-            )
-            screen.blit(role_label, (SIDEBAR_X + 180, y + 4))
-            
-            # Show vote count during DAY_VOTE
+            if show_role and not p.alive:
+                role_label = render_text(p.role.name_zh, scale=FONT_SCALE_SMALL, color=(100, 100, 100))
+            elif show_role:
+                role_label = render_text(p.role.name_zh, scale=FONT_SCALE_SMALL, color=(140, 180, 140))
+            else:
+                role_label = render_text("???", scale=FONT_SCALE_SMALL, color=(100, 100, 100))
+            screen.blit(role_label, (SIDEBAR_X + 170, y + 4))
+
+            # Vote count during DAY_VOTE
             if state.phase == GamePhase.DAY_VOTE and p.alive:
                 votes = sum(1 for v in state.votes.values() if v == p.index)
                 if votes > 0:
