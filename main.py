@@ -85,6 +85,10 @@ class WerewolfGame:
         # Ambience state
         self._ambience_channel: Optional[pygame.mixer.Channel] = None
         self._current_ambience: str = ""  # "night", "day", or ""
+        # Phase transition banner state
+        self._banner_text: str = ""
+        self._banner_timer: float = 0.0
+        self._banner_duration: float = 2.5
         # Human player interaction state
         self._human_player_idx: int = 0
         self._human_voted: bool = False
@@ -147,7 +151,7 @@ class WerewolfGame:
                 self._phase_timer = 0.0
             return
 
-        # ── Sound: detect phase transitions ──
+        # ── Sound + Banner: detect phase transitions ──
         current_phase = self.game_state.phase
         if current_phase != self._prev_phase:
             if current_phase == GamePhase.GAME_OVER:
@@ -155,9 +159,11 @@ class WerewolfGame:
                 pass
             elif current_phase.is_night:
                 night_chime().play() if night_chime() else None
+                self._show_banner("NIGHT FALLS")
             elif current_phase.is_day:
                 if current_phase != GamePhase.GAME_OVER:
                     day_chime().play() if day_chime() else None
+                    self._show_banner("DAY BREAKS")
             # Update ambience on night↔day transitions
             self._update_ambience()
             self._prev_phase = current_phase
@@ -173,6 +179,10 @@ class WerewolfGame:
             if self._restart_clicked:
                 self._restart_game()
             return
+
+        # --- Banner timer ---
+        if self._banner_timer > 0:
+            self._banner_timer -= dt
 
         # --- Accumulate phase timer ---
         self._phase_timer += dt
@@ -405,6 +415,11 @@ class WerewolfGame:
                         )
                     return
 
+    def _show_banner(self, text: str) -> None:
+        """Show a dramatic banner announcement."""
+        self._banner_text = text
+        self._banner_timer = self._banner_duration
+
     def _update_ambience(self) -> None:
         """Start/stop ambient sound based on current phase."""
         phase = self.game_state.phase
@@ -526,7 +541,25 @@ class WerewolfGame:
         # ── 1. Render village background + player characters ──
         self.renderer.render(screen, is_night)
 
-        # ── 2. Semi-transparent overlay for UI readability ──
+        # ── 2. Phase transition banner ──
+        if self._banner_timer > 0:
+            banner_text = self._banner_text
+            banner_scale = 5
+            banner_color = (200, 200, 100) if "DAY" in banner_text else (100, 130, 200)
+            banner_surf = render_text(
+                banner_text, scale=banner_scale, color=banner_color,
+                shadow=(20, 20, 60),
+            )
+            # Centre banner in the village area
+            bx = (SIDEBAR_X - banner_surf.get_width()) // 2
+            by = 1440 // 3
+            # Dark background bar
+            bar_surf = pygame.Surface((banner_surf.get_width() + 60, banner_surf.get_height() + 24), pygame.SRCALPHA)
+            bar_surf.fill((0, 0, 0, 180))
+            screen.blit(bar_surf, (bx - 30, by - 12))
+            screen.blit(banner_surf, (bx, by))
+
+        # ── 3. Semi-transparent overlay for UI readability ──
         overlay = pygame.Surface((640, 1440), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 160) if is_night else (0, 0, 0, 100))
         screen.blit(overlay, (SIDEBAR_X - 20, 0))
