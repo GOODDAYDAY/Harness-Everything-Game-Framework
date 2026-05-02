@@ -28,9 +28,9 @@ from game.sound import (
 )
 
 # Pixel font size for UI overlay
-FONT_SIZE_TITLE = 28
-FONT_SIZE_PLAYER = 20
-FONT_SIZE_LOG = 16
+FONT_SIZE_TITLE = 36
+FONT_SIZE_PLAYER = 24
+FONT_SIZE_LOG = 18
 
 # UI overlay positioning
 SIDEBAR_X = 1900
@@ -100,6 +100,10 @@ class WerewolfGame:
         Drives the game loop: starts the game, runs NPC decisions for each
         night and day phase, advances phases on a timer.
         """
+        # ── Update renderer day/night animation ──
+        if self.game_state.phase != GamePhase.SETUP:
+            is_day_phase = self.game_state.phase.is_day
+            self.renderer.set_day_mode(is_day_phase, dt)
         # --- SETUP → start game on first frame ---
         if self.game_state.phase == GamePhase.SETUP and not self._game_started:
             self._game_started = True

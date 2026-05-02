@@ -85,6 +85,7 @@ T_STONE = 13
 T_SKY = 14
 T_SKY_TREE = 15
 T_DOOR_CLOSED = 16
+T_MEETING = 17  # Town square meeting platform
 
 
 def _build_village_map() -> list[list[int]]:
@@ -174,6 +175,12 @@ def _build_village_map() -> list[list[int]]:
     grid[10][6] = T_STONE
     grid[11][22] = T_STONE
     grid[11][23] = T_STONE
+
+    # Town square meeting platform (decorative stone circle at path intersection)
+    grid[10][15] = T_MEETING
+    grid[10][16] = T_MEETING
+    grid[11][15] = T_MEETING
+    grid[11][16] = T_MEETING
 
     return grid
 
@@ -418,6 +425,24 @@ def _draw_tile(tile_type: int, night: bool) -> pygame.Surface:
         pygame.draw.circle(surf, c("stone"), (50, 55), 8)
         pygame.draw.circle(surf, c("well"), (42, 48), 6)
 
+    elif tile_type == T_MEETING:
+        """Town square meeting platform — a raised stone circle."""
+        # Base — slightly lighter than path to stand out
+        surf.fill(c("path"))
+        # Stone circle (outer ring)
+        pygame.draw.circle(surf, c("stone"), (40, 40), 28, 4)
+        # Inner compass lines
+        pygame.draw.line(surf, c("stone"), (40, 20), (40, 60), 2)
+        pygame.draw.line(surf, c("stone"), (20, 40), (60, 40), 2)
+        # Centre dot — warm glow at day, subtle at night
+        dot_color = c("window_glow") if not night else (180, 140, 80)
+        surf.set_at((40, 40), dot_color)
+        # Night glow
+        if night:
+            s = pygame.Surface((24, 24), pygame.SRCALPHA)
+            s.fill((255, 200, 100, 25))
+            surf.blit(s, (28, 28))
+
     return surf
 
 
@@ -448,6 +473,24 @@ PLAYER_HOMES: list[tuple[int, int]] = [
     (16, 21), # Player 11
 ]
 
+# Town square meeting positions — players gather here during day phases
+# Arranged in a semi-circle around the village centre (row 10, col 14)
+# Each position is (row, col) near the central path intersection
+MEETING_POSITIONS: list[tuple[float, float]] = [
+    (9.5, 15.5),   # Player 0  - centre front
+    (9.0, 17.0),   # Player 1  - centre right
+    (9.0, 13.0),   # Player 2  - centre left
+    (9.5, 12.0),   # Player 3  - far left
+    (10.5, 17.5),  # Player 4  - back right
+    (11.0, 16.0),  # Player 5  - back centre
+    (11.0, 13.0),  # Player 6  - back centre-left
+    (10.5, 11.5),  # Player 7  - back left
+    (12.0, 17.0),  # Player 8  - far back right
+    (12.0, 14.0),  # Player 9  - far back centre
+    (12.0, 12.0),  # Player 10 - far back centre-left
+    (12.5, 15.0),  # Player 11 - far back
+]
+
 
 class VillageRenderer:
     """Renders the pixel-art village background with player characters."""
@@ -459,6 +502,11 @@ class VillageRenderer:
         self._bg_night: Optional[pygame.Surface] = None
         self._players: list[Optional[Any]] = []  # list of player dicts or None
         self._font: Optional[pygame.font.Font] = None
+        # Player position interpolation for day/night gathering
+        self._is_day_mode: bool = False
+        self._anim_progress: float = 0.0  # 0=all at home, 1=all at meeting
+        # Current interpolated positions cache (sub-tile precision)
+        self._current_positions: list[tuple[float, float]] = []
 
     def _build_background(self, night: bool) -> pygame.Surface:
         """Build the full background surface from the tile map."""
@@ -485,6 +533,41 @@ class VillageRenderer:
         .index, .alive, .name, .role attributes.
         """
         self._players = list(players)
+        # Initialise cached positions to home positions
+        if not self._current_positions:
+            for idx in range(len(self._players)):
+                pos_idx = idx % len(PLAYER_HOMES)
+                row, col = PLAYER_HOMES[pos_idx]
+                self._current_positions.append((float(row), float(col)))
+
+    def set_day_mode(self, is_day: bool, dt: float) -> None:
+        """Set whether it's day (gathering) or night (returning home).
+        Smoothly animates the transition over GATHER_SPEED seconds.
+        """
+        self._is_day_mode = is_day
+        target = 1.0 if is_day else 0.0
+        GATHER_SPEED = 1.5  # seconds to fully transition
+        if self._anim_progress < target:
+            self._anim_progress = min(self._anim_progress + dt / GATHER_SPEED, target)
+        elif self._anim_progress > target:
+            self._anim_progress = max(self._anim_progress - dt / GATHER_SPEED, target)
+        # Update interpolated positions
+        for idx in range(len(self._players)):
+            pos_idx = idx % len(PLAYER_HOMES)
+            home_row, home_col = PLAYER_HOMES[pos_idx]
+            if idx < len(MEETING_POSITIONS):
+                meet_row, meet_col = MEETING_POSITIONS[idx]
+                t = self._anim_progress
+                # Smooth step easing
+                t = t * t * (3.0 - 2.0 * t)  # smoothstep
+                row = home_row + (meet_row - home_row) * t
+                col = home_col + (meet_col - home_col) * t
+            else:
+                row, col = float(home_row), float(home_col)
+            if idx < len(self._current_positions):
+                self._current_positions[idx] = (row, col)
+            else:
+                self._current_positions.append((row, col))
 
     def render(self, screen: pygame.Surface, night: bool) -> None:
         """Draw the village background and player characters onto the screen."""
@@ -495,15 +578,17 @@ class VillageRenderer:
         self._render_players(screen, night)
 
     def _render_players(self, screen: pygame.Surface, night: bool) -> None:
-        """Draw character sprites for all players at their home positions."""
+        """Draw character sprites for all players at their (interpolated) positions.
+        During day phases, players gather at the town square; at night they return home.
+        """
         if not self._players:
             return
 
         if self._font is None:
             try:
-                self._font = pygame.font.Font(None, 18)
+                self._font = pygame.font.Font(None, 24)
             except pygame.error:
-                self._font = pygame.font.Font(None, 18)
+                self._font = pygame.font.Font(None, 24)
 
         for player in self._players:
             if player is None:
@@ -511,13 +596,18 @@ class VillageRenderer:
 
             idx = player.index
             alive = player.alive
-            pos_idx = idx % len(PLAYER_HOMES)
-            row, col = PLAYER_HOMES[pos_idx]
 
-            # Centre the character sprite in the tile
+            # Get interpolated position (sub-tile precision)
+            if idx < len(self._current_positions):
+                row, col = self._current_positions[idx]
+            else:
+                pos_idx = idx % len(PLAYER_HOMES)
+                row, col = PLAYER_HOMES[pos_idx]
+
+            # Centre the character sprite in or near the tile
             sprite = get_character_sprite(idx, alive)
-            x_pos = col * TILE_SIZE + (TILE_SIZE - CHAR_W) // 2
-            y_pos = row * TILE_SIZE + TILE_SIZE - CHAR_H - 4
+            x_pos = int(col * TILE_SIZE + (TILE_SIZE - CHAR_W) // 2)
+            y_pos = int(row * TILE_SIZE + TILE_SIZE - CHAR_H - 4)
 
             screen.blit(sprite, (x_pos, y_pos))
 
@@ -527,7 +617,7 @@ class VillageRenderer:
                 if not alive:
                     name += " ✗"
                 label = self._font.render(name, True, (255, 255, 255) if not night else (200, 200, 200))
-                label_x = col * TILE_SIZE + (TILE_SIZE - label.get_width()) // 2
+                label_x = int(col * TILE_SIZE + (TILE_SIZE - label.get_width()) // 2)
                 label_y = y_pos + CHAR_H + 2
                 # Shadow for readability
                 shadow = self._font.render(name, True, (0, 0, 0))
