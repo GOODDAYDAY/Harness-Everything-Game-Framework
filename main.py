@@ -116,16 +116,15 @@ class WerewolfGame:
             is_day_phase = self.game_state.phase.is_day
             self.renderer.set_day_mode(is_day_phase, dt)
             self.renderer.update_fx(dt)
-        # --- SETUP → wait for role reveal click ---
+        # --- SETUP → wait for role reveal click then start game ---
         if self.game_state.phase == GamePhase.SETUP:
             if not self._role_revealed:
                 return  # wait for human to click the role card
             if not self._game_started:
                 self._game_started = True
+                self.game_state.start_game()
                 self._phase_timer = 0.0
-                return
-            # If we get here, _role_revealed is True but start_game not called yet
-            # -> handled below as a timer fallback
+            return
 
         # ── Sound: detect phase transitions ──
         current_phase = self.game_state.phase
@@ -139,16 +138,6 @@ class WerewolfGame:
                 if current_phase != GamePhase.GAME_OVER:
                     day_chime().play() if day_chime() else None
             self._prev_phase = current_phase
-
-        # --- SETUP — pause for role reveal then start game ---
-        if self.game_state.phase == GamePhase.SETUP:
-            if not self._role_revealed:
-                return  # wait for human to click the role card
-            if not self._game_started:
-                self._game_started = True
-                self.game_state.start_game()
-                self._phase_timer = 0.0
-            return
 
         # --- GAME OVER — stop advancing; play sound once ---
         if self.game_state.phase == GamePhase.GAME_OVER:
