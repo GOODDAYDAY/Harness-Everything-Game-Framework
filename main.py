@@ -72,6 +72,7 @@ class WerewolfGame:
             GamePhase.NIGHT_WEREWOLF: 3.0,
             GamePhase.NIGHT_WITCH: 2.0,
             GamePhase.DAY_ANNOUNCE: 3.0,
+            GamePhase.DAY_SHERIFF_ELECTION: 1.5,
             GamePhase.DAY_DISCUSSION: 5.0,
             GamePhase.DAY_VOTE: 6.0,
             GamePhase.DAY_RESULT: 3.0,
@@ -333,7 +334,8 @@ class WerewolfGame:
 
         elif phase == GamePhase.DAY_DISCUSSION:
             self._phase_timer = 0.0
-            # Discussion phase — placeholder, advances after timer
+            # Discussion phase — timer provides pause for player to think
+            # Auto-advance to DAY_VOTE after discussion time
             self.game_state.advance_day_phase()
 
         elif phase == GamePhase.DAY_VOTE:
