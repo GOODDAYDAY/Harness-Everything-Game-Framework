@@ -7,6 +7,7 @@ from typing import Optional
 
 import pygame
 
+from game.bitmap_font import render_text
 from scripts.game_engine import GameEngine
 from game.game_state import GameState
 from game.phases import GamePhase
@@ -32,10 +33,11 @@ from game.sound import (
     game_over_defeat,
 )
 
-# Pixel font size for UI overlay
-FONT_SIZE_TITLE = 36
-FONT_SIZE_PLAYER = 24
-FONT_SIZE_LOG = 18
+# Pixel font scale for UI overlay (5x7 base, so scale=3 -> 15x21px per char)
+FONT_SCALE_TITLE = 4   # ~20x28px per char
+FONT_SCALE_PLAYER = 3   # ~15x21px per char
+FONT_SCALE_LOG = 2      # ~10x14px per char
+FONT_SCALE_SMALL = 1    # ~5x7px per char
 
 # UI overlay positioning
 SIDEBAR_X = 1900
@@ -55,9 +57,7 @@ class WerewolfGame:
         )
         self.game_state = GameState()
         self.renderer = VillageRenderer()
-        self._font_title: Optional[pygame.font.Font] = None
-        self._font_player: Optional[pygame.font.Font] = None
-        self._font_log: Optional[pygame.font.Font] = None
+        # Using bitmap font scales instead of pygame.font.Font objects
         # Phase timing (seconds to wait in each phase before auto-advancing)
         self._phase_timer: float = 0.0
         self._phase_duration: float = 1.5  # fallback seconds per phase
@@ -100,15 +100,7 @@ class WerewolfGame:
         except pygame.error:
             pass  # headless / no audio — sounds will be silent
 
-        # Load pixel font — fall back to default if unavailable
-        try:
-            self._font_title = pygame.font.Font("assets/pixel_font.ttf", FONT_SIZE_TITLE)
-            self._font_player = pygame.font.Font("assets/pixel_font.ttf", FONT_SIZE_PLAYER)
-            self._font_log = pygame.font.Font("assets/pixel_font.ttf", FONT_SIZE_LOG)
-        except (FileNotFoundError, pygame.error):
-            self._font_title = pygame.font.Font(None, FONT_SIZE_TITLE + 8)
-            self._font_player = pygame.font.Font(None, FONT_SIZE_PLAYER + 6)
-            self._font_log = pygame.font.Font(None, FONT_SIZE_LOG + 4)
+        # Using procedural bitmap font — no external font files needed
 
         return True
 
@@ -386,22 +378,22 @@ class WerewolfGame:
         screen.blit(overlay, (SIDEBAR_X - 20, 0))
 
         # ── 3. Title / phase info ──
-        title_font = self._font_title
-        player_font = self._font_player
-        log_font = self._font_log
-
-        title_text = title_font.render(
-            "🎮 Pixel Werewolf", True, (255, 220, 150)
+        title_text = render_text(
+            "Pixel Werewolf", scale=FONT_SCALE_TITLE, color=(255, 220, 150),
+            shadow=(60, 40, 10)
         )
         screen.blit(title_text, (SIDEBAR_X, SIDEBAR_Y))
 
-        phase_label = title_font.render(
-            f"{state.phase.display_name}", True, (200, 200, 255) if is_night else (255, 255, 200)
+        phase_label = render_text(
+            f"{state.phase.display_name}", scale=FONT_SCALE_PLAYER,
+            color=(200, 200, 255) if is_night else (255, 255, 200),
+            shadow=(30, 30, 60) if is_night else (60, 60, 30)
         )
         screen.blit(phase_label, (SIDEBAR_X, SIDEBAR_Y + 36))
 
-        day_label = player_font.render(
-            f"Day {state.day}", True, (200, 200, 200)
+        day_label = render_text(
+            f"Day {state.day}", scale=FONT_SCALE_PLAYER, color=(200, 200, 200),
+            shadow=(40, 40, 40)
         )
         screen.blit(day_label, (SIDEBAR_X, SIDEBAR_Y + 68))
 
@@ -425,11 +417,11 @@ class WerewolfGame:
             
             if p.alive:
                 color = (220, 220, 220)
-                prefix = "🟢"
+                prefix = ">"
                 role_name_label = p.role.name_zh if state.phase.is_day else "???"
             else:
                 color = (100, 100, 100)
-                prefix = "💀"
+                prefix = "x"
                 role_name_label = p.role.name_zh
 
             # Draw vote-target highlight background
@@ -441,9 +433,10 @@ class WerewolfGame:
             elif p.index == self._human_player_idx:
                 color = (180, 220, 255)  # highlight self in a different colour
 
-            sheriff = "★" if p.is_sheriff else ""
-            line = player_font.render(
-                f"{prefix} {p.name} {sheriff}[{role_name_label}]", True, color
+            sheriff_mark = "[S]" if p.is_sheriff else ""
+            line = render_text(
+                f"{prefix} {p.name} {sheriff_mark}[{role_name_label}]",
+                scale=FONT_SCALE_PLAYER, color=color
             )
             screen.blit(line, (SIDEBAR_X + 4, y))
             
@@ -451,35 +444,35 @@ class WerewolfGame:
             if state.phase == GamePhase.DAY_VOTE and p.alive:
                 votes = sum(1 for v in state.votes.values() if v == p.index)
                 if votes > 0:
-                    vote_surf = player_font.render(f"[{votes}]", True, (255, 180, 80))
+                    vote_surf = render_text(f"[{votes}]", scale=FONT_SCALE_PLAYER, color=(255, 180, 80))
                     screen.blit(vote_surf, (SIDEBAR_X + 280, y))
 
             y += LIST_SPACING
 
         # ── 5. Game log ──
         y = LOG_START_Y
-        log_label = log_font.render("-- Game Log --", True, (160, 160, 160))
+        log_label = render_text("-- Game Log --", scale=FONT_SCALE_LOG, color=(160, 160, 160))
         screen.blit(log_label, (SIDEBAR_X, y))
         y += LOG_SPACING
 
         for entry in state.log[-8:]:
-            text = log_font.render(entry["message"], True, (160, 160, 160))
+            text = render_text(entry["message"], scale=FONT_SCALE_LOG, color=(160, 160, 160))
             screen.blit(text, (SIDEBAR_X, y))
             y += LOG_SPACING
 
         # ── 5b. Instruction text (context-aware) ──
         instr_y = 1400
         if state.phase == GamePhase.DAY_VOTE and self._human_voted:
-            instr = log_font.render("✓ Vote cast — advancing...", True, (160, 200, 160))
+            instr = render_text("Vote cast - advancing...", scale=FONT_SCALE_LOG, color=(160, 200, 160))
         elif (state.phase == GamePhase.DAY_VOTE and not self._human_voted
               and self._human_player_idx < len(state.players.players)
               and state.players.get_player(self._human_player_idx).alive):
-            instr = log_font.render("Click a name above to cast your vote", True, (255, 200, 100))
+            instr = render_text("Click a name above to cast your vote", scale=FONT_SCALE_LOG, color=(255, 200, 100))
         elif state.phase == GamePhase.GAME_OVER:
             winner = state.winner or "unknown"
-            instr = log_font.render(f"🏆 Game Over — {winner} team wins!", True, (255, 220, 150))
+            instr = render_text(f"Game Over - {winner} team wins!", scale=FONT_SCALE_PLAYER, color=(255, 220, 150), shadow=(80, 60, 20))
         else:
-            instr = log_font.render("Game auto-plays • Watch the story unfold", True, (120, 120, 140))
+            instr = render_text("Game auto-plays - Watch the story unfold", scale=FONT_SCALE_LOG, color=(120, 120, 140))
         screen.blit(instr, (SIDEBAR_X, instr_y))
 
         # ── 6. Night overlay darkness ──

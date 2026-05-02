@@ -11,6 +11,7 @@ from typing import Optional, Any
 
 import pygame
 
+from game.bitmap_font import render_text as _render_text
 from game.player_sprites import CHAR_H, CHAR_W, get_character_sprite
 
 # Constants
@@ -507,7 +508,7 @@ class VillageRenderer:
         self._bg_day: Optional[pygame.Surface] = None
         self._bg_night: Optional[pygame.Surface] = None
         self._players: list[Optional[Any]] = []  # list of player dicts or None
-        self._font: Optional[pygame.font.Font] = None
+        self._font: Optional[pygame.font.Font] = None  # kept for .get_height() only
         # Player position interpolation for day/night gathering
         self._is_day_mode: bool = False
         self._anim_progress: float = 0.0  # 0=all at home, 1=all at meeting
@@ -715,12 +716,6 @@ class VillageRenderer:
         if not self._players:
             return
 
-        if self._font is None:
-            try:
-                self._font = pygame.font.Font(None, 24)
-            except pygame.error:
-                self._font = pygame.font.Font(None, 24)
-
         for player in self._players:
             if player is None:
                 continue
@@ -745,18 +740,17 @@ class VillageRenderer:
             # Draw action feedback effects on top
             self._draw_action_fx(screen, idx, x_pos, y_pos)
 
-            # Draw name label below
-            if self._font:
-                name = getattr(player, 'name', f'P{idx}')
-                if not alive:
-                    name += " ✗"
-                label = self._font.render(name, True, (255, 255, 255) if not night else (200, 200, 200))
-                label_x = int(col * TILE_SIZE + (TILE_SIZE - label.get_width()) // 2)
-                label_y = y_pos + CHAR_H + 2
-                # Shadow for readability
-                shadow = self._font.render(name, True, (0, 0, 0))
-                screen.blit(shadow, (label_x + 1, label_y + 1))
-                screen.blit(label, (label_x, label_y))
+            # Draw name label below using bitmap font
+            name = getattr(player, 'name', f'P{idx}')
+            if not alive:
+                name += " x"
+            fg = (255, 255, 255) if not night else (200, 200, 200)
+            label = _render_text(name, scale=1, color=fg)
+            shadow = _render_text(name, scale=1, color=(0, 0, 0))
+            label_x = int(col * TILE_SIZE + (TILE_SIZE - label.get_width()) // 2)
+            label_y = y_pos + CHAR_H + 2
+            screen.blit(shadow, (label_x + 1, label_y + 1))
+            screen.blit(label, (label_x, label_y))
 
     def invalidate_cache(self) -> None:
         """Clear cached backgrounds (e.g. on day/night transition)."""
