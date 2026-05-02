@@ -515,6 +515,12 @@ class VillageRenderer:
         self._current_positions: list[tuple[float, float]] = []
         # Action feedback overlays (player_idx, fx_type, remaining_time)
         self._action_fx: list[tuple[int, str, float]] = []
+        # ── Background day/night blend transition ──
+        self._bg_blend_active: bool = False       # True during a transition
+        self._bg_blend_from_night: bool = False    # True = blending from night→day; False = day→night
+        self._bg_blend_progress: float = 0.0       # 0.0 → 1.0 over transition duration
+        self._bg_blend_duration: float = 1.2       # seconds for full blend
+        self._bg_blend_surface: Optional[pygame.Surface] = None  # pre-mixed blend frame
 
     def _build_background(self, night: bool) -> pygame.Surface:
         """Build the full background surface from the tile map."""
@@ -526,15 +532,22 @@ class VillageRenderer:
         return bg
 
     def get_background(self, night: bool) -> pygame.Surface:
-        """Get cached background surface for day or night."""
-        if night:
-            if self._bg_night is None:
-                self._bg_night = self._build_background(True)
-            return self._bg_night
-        else:
-            if self._bg_day is None:
-                self._bg_day = self._build_background(False)
-            return self._bg_day
+        """Get cached background surface for day or night.
+
+        During a transition, returns a blended surface between day and night.
+        """
+        # Ensure both caches exist
+        if self._bg_day is None:
+            self._bg_day = self._build_background(False)
+        if self._bg_night is None:
+            self._bg_night = self._build_background(True)
+
+        # During an active background blend, return the blended surface
+        if self._bg_blend_active and self._bg_blend_surface is not None:
+            return self._bg_blend_surface
+
+        # Normal static background
+        return self._bg_night if night else self._bg_day
 
     def set_players(self, players: list[Any]) -> None:
         """Set the player list for rendering. Each item should have:
@@ -551,8 +564,22 @@ class VillageRenderer:
     def set_day_mode(self, is_day: bool, dt: float) -> None:
         """Set whether it's day (gathering) or night (returning home).
         Smoothly animates the transition over GATHER_SPEED seconds.
+        Also blends the background between day/night caches.
         """
+        last_mode = self._is_day_mode
         self._is_day_mode = is_day
+
+        # ── Background blend transition ──
+        # Detect actual flip in day/night mode and start a background blend
+        # Only trigger if we've been initialised (bg cache exists) and the mode flips
+        if self._bg_day is not None and last_mode != is_day:
+            self._bg_blend_active = True
+            # blending *from* the previous state: night→day, or day→night
+            self._bg_blend_from_night = not last_mode
+            self._bg_blend_progress = 0.0
+            self._bg_blend_surface = None
+
+        # ── Player position animation ──
         target = 1.0 if is_day else 0.0
         GATHER_SPEED = 1.5  # seconds to fully transition
         if self._anim_progress < target:
@@ -576,6 +603,43 @@ class VillageRenderer:
                 self._current_positions[idx] = (row, col)
             else:
                 self._current_positions.append((row, col))
+
+        # ── Update background blend progress ──
+        if self._bg_blend_active:
+            self._bg_blend_progress = min(
+                self._bg_blend_progress + dt / self._bg_blend_duration, 1.0
+            )
+            # Calculate the blended frame
+            t = self._bg_blend_progress
+            # Ease-in-out
+            t = t * t * (3.0 - 2.0 * t)  # smoothstep
+            if self._bg_blend_surface is None:
+                self._bg_blend_surface = pygame.Surface(
+                    (VIEWPORT_W, VIEWPORT_H), pygame.SRCALPHA
+                )
+            # Ensure both background caches exist
+            if self._bg_day is None:
+                self._bg_day = self._build_background(False)
+            if self._bg_night is None:
+                self._bg_night = self._build_background(True)
+            # Blend: if blending from night→day, blend_night = 1-t, else blend_night = t
+            if self._bg_blend_from_night:
+                # night at t=0, day at t=1
+                blend_night = 1.0 - t
+            else:
+                # day at t=0, night at t=1
+                blend_night = t
+            # Proper alpha blend: blit day, then blit night with alpha
+            self._bg_blend_surface.fill((0, 0, 0))
+            self._bg_blend_surface.blit(self._bg_day, (0, 0))
+            if int(blend_night * 255) > 0:
+                night_overlay = self._bg_night.copy()
+                night_overlay.set_alpha(int(blend_night * 255))
+                self._bg_blend_surface.blit(night_overlay, (0, 0))
+            # If blend complete, snap to final
+            if self._bg_blend_progress >= 1.0:
+                self._bg_blend_active = False
+                self._bg_blend_surface = None
 
     def show_action(self, player_idx: int, fx_type: str, duration: float = 1.0) -> None:
         """Show a visual feedback effect on a player character.
