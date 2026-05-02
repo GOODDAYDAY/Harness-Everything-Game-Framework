@@ -616,7 +616,7 @@ class WerewolfGame:
         self.renderer.set_players(state.players.players)
 
         # ── 1. Render village background + player characters ──
-        self.renderer.render(screen, is_night)
+        self.renderer.render(screen, is_night, time=self._phase_timer)
 
         # ── 2. Persistent phase indicator badge (top-left of village view) ──
         # Build a concise phase+day label

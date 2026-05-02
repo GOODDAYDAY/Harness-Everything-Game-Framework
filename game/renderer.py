@@ -7,6 +7,7 @@ with procedurally drawn pixel-art tiles. No external assets needed.
 
 from __future__ import annotations
 
+import math
 from typing import Optional, Any
 
 import pygame
@@ -553,6 +554,64 @@ def get_tile(tile_type: int, night: bool) -> pygame.Surface:
     return _tile_cache[key]
 
 
+def _draw_tile_overlay(target: pygame.Surface, tile_type: int, night: bool,
+                       col: int, row: int, time: float) -> None:
+    """Draw per-frame animated overlays on top of a cached tile.
+
+    Currently animates:
+      - T_WATER: subtle shimmer / ripple lines
+      - T_LANTERN: warm glow pulse (night only)
+    """
+    x = col * TILE_SIZE
+    y = row * TILE_SIZE
+    waviness = math.sin(time * 2.0 + col * 0.7 + row * 1.3)
+
+    if tile_type == T_WATER:
+        # Animated water shimmer: moving highlight lines
+        highlight_y = y + 20 + int(10 * waviness)
+        for dx in range(4, TILE_SIZE - 4, 12):
+            alpha = max(0, min(255, int(128 + 64 * math.sin(time * 1.5 + dx * 0.3 + col))))
+            shimmer_color = (200, 220, 255, alpha) if not night else (100, 140, 200, alpha)
+            # Draw shimmer pixels
+            for hx in range(dx, min(dx + 6, TILE_SIZE - 1)):
+                hy = highlight_y + int(3 * math.sin(time * 0.7 + dx * 0.5))
+                if 0 <= hy < TILE_SIZE and 0 <= hx < TILE_SIZE:
+                    # Semi-transparent by doing a weighted average with existing
+                    existing = target.get_at((x + hx, y + hy))
+                    col_blend = (
+                        (existing[0] * (255 - alpha) + shimmer_color[0] * alpha) // 256,
+                        (existing[1] * (255 - alpha) + shimmer_color[1] * alpha) // 256,
+                        (existing[2] * (255 - alpha) + shimmer_color[2] * alpha) // 256,
+                    )
+                    target.set_at((x + hx, y + hy), col_blend)
+
+    elif tile_type == T_LANTERN and night:
+        # Flickering warm glow around the lantern
+        glow_strength = max(0.6, 0.8 + 0.2 * math.sin(time * 5.0 + col * 2.1))
+        glow_color = (
+            int(255 * glow_strength),
+            int(180 * glow_strength),
+            int(80 * glow_strength),
+        )
+        glow_radius = int(16 * glow_strength)
+        cx, cy = x + 40, y + 27  # lantern center
+        # Draw a simple radial glow as concentric circles
+        for r in range(glow_radius, 0, -4):
+            fade = 1.0 - (r / glow_radius)
+            a = int(60 * fade * glow_strength)
+            if a <= 0:
+                continue
+            glow = (glow_color[0], glow_color[1], glow_color[2])
+            # Draw circle outline with fade
+            pygame.draw.circle(target, glow, (cx, cy), r)
+        # Also add a brighter halo at the lantern centre
+        center_glow = (255, 220, 150)
+        for r2 in range(6, 0, -2):
+            a = int(80 * glow_strength * (1.0 - r2 / 6.0))
+            if a > 0:
+                pygame.draw.circle(target, center_glow, (cx, cy), r2)
+
+
 # ── Village renderer ───────────────────────────────────────────────
 
 # Player home positions on the village grid (row, col)
@@ -759,10 +818,24 @@ class VillageRenderer:
                 remaining.append((idx, fx_type, new_timer))
         self._action_fx = remaining
 
-    def render(self, screen: pygame.Surface, night: bool) -> None:
-        """Draw the village background and player characters onto the screen."""
+    def render(self, screen: pygame.Surface, night: bool, time: float = 0.0) -> None:
+        """Draw the village background and player characters onto the screen.
+
+        Args:
+            screen: The pygame surface to draw onto.
+            night: True if night-time palette should be used.
+            time: Game time in seconds (for animated tiles like water & lanterns).
+                  Pass 0.0 to disable animation (e.g. when paused).
+        """
         bg = self.get_background(night)
         screen.blit(bg, (0, 0))
+
+        # Draw per-frame animated tile overlays (water shimmer, lantern glow)
+        if time > 0.0:
+            for row_idx, row in enumerate(self._tile_map):
+                for col_idx, tile_type in enumerate(row):
+                    if tile_type == T_WATER or (tile_type == T_LANTERN and night):
+                        _draw_tile_overlay(screen, tile_type, night, col_idx, row_idx, time)
 
         # Render player characters on top of the background
         self._render_players(screen, night)
