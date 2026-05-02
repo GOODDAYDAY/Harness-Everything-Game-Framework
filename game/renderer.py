@@ -29,29 +29,29 @@ class Palette:
     Each entry has a day variant and a night variant — night colours
     are darker, cooler, with warm light from windows.
     """
-    sky: tuple[tuple[int, int, int], tuple[int, int, int]] = ((180, 210, 240), (10, 15, 40))
-    sky_distant: tuple[tuple[int, int, int], tuple[int, int, int]] = ((150, 190, 220), (8, 12, 35))
-    grass_light: tuple[tuple[int, int, int], tuple[int, int, int]] = ((140, 200, 80), (30, 60, 30))
-    grass_dark: tuple[tuple[int, int, int], tuple[int, int, int]] = ((100, 170, 60), (20, 45, 20))
-    path: tuple[tuple[int, int, int], tuple[int, int, int]] = ((180, 160, 120), (50, 45, 35))
-    path_dark: tuple[tuple[int, int, int], tuple[int, int, int]] = ((150, 130, 90), (40, 35, 25))
-    wood_light: tuple[tuple[int, int, int], tuple[int, int, int]] = ((170, 130, 60), (60, 45, 20))
-    wood_dark: tuple[tuple[int, int, int], tuple[int, int, int]] = ((130, 90, 40), (45, 35, 15))
-    roof_red: tuple[tuple[int, int, int], tuple[int, int, int]] = ((190, 70, 50), (70, 25, 15))
-    roof_dark: tuple[tuple[int, int, int], tuple[int, int, int]] = ((140, 50, 35), (50, 18, 10))
-    wall_cream: tuple[tuple[int, int, int], tuple[int, int, int]] = ((230, 210, 170), (80, 70, 50))
-    wall_dark: tuple[tuple[int, int, int], tuple[int, int, int]] = ((200, 180, 140), (70, 60, 40))
-    window_glow: tuple[int, int, int] = (255, 220, 130)  # same day/night, always warm
-    window_dark: tuple[int, int, int] = (40, 35, 25)
-    tree_trunk: tuple[tuple[int, int, int], tuple[int, int, int]] = ((100, 70, 40), (35, 25, 15))
-    tree_canopy: tuple[tuple[int, int, int], tuple[int, int, int]] = ((70, 140, 40), (20, 50, 15))
-    tree_canopy_light: tuple[tuple[int, int, int], tuple[int, int, int]] = ((100, 170, 60), (30, 60, 20))
-    water: tuple[tuple[int, int, int], tuple[int, int, int]] = ((80, 140, 180), (15, 30, 60))
-    water_light: tuple[tuple[int, int, int], tuple[int, int, int]] = ((120, 170, 200), (25, 45, 80))
-    fence: tuple[tuple[int, int, int], tuple[int, int, int]] = ((160, 120, 60), (55, 40, 20))
-    well: tuple[tuple[int, int, int], tuple[int, int, int]] = ((130, 120, 100), (45, 40, 35))
-    flower: tuple[tuple[int, int, int], tuple[int, int, int]] = ((240, 100, 120), (100, 30, 40))
-    stone: tuple[tuple[int, int, int], tuple[int, int, int]] = ((160, 150, 140), (55, 50, 45))
+    sky: tuple[tuple[int, int, int], tuple[int, int, int]] = ((185, 215, 245), (12, 16, 42))
+    sky_distant: tuple[tuple[int, int, int], tuple[int, int, int]] = ((155, 195, 225), (10, 14, 38))
+    grass_light: tuple[tuple[int, int, int], tuple[int, int, int]] = ((150, 210, 90), (32, 62, 32))
+    grass_dark: tuple[tuple[int, int, int], tuple[int, int, int]] = ((110, 180, 65), (22, 48, 22))
+    path: tuple[tuple[int, int, int], tuple[int, int, int]] = ((190, 170, 130), (55, 48, 38))
+    path_dark: tuple[tuple[int, int, int], tuple[int, int, int]] = ((160, 140, 100), (42, 38, 28))
+    wood_light: tuple[tuple[int, int, int], tuple[int, int, int]] = ((180, 140, 70), (65, 48, 22))
+    wood_dark: tuple[tuple[int, int, int], tuple[int, int, int]] = ((140, 100, 45), (48, 38, 16))
+    roof_red: tuple[tuple[int, int, int], tuple[int, int, int]] = ((200, 80, 55), (75, 28, 18))
+    roof_dark: tuple[tuple[int, int, int], tuple[int, int, int]] = ((150, 55, 38), (55, 22, 12))
+    wall_cream: tuple[tuple[int, int, int], tuple[int, int, int]] = ((235, 215, 178), (85, 75, 55))
+    wall_dark: tuple[tuple[int, int, int], tuple[int, int, int]] = ((205, 185, 148), (72, 62, 42))
+    window_glow: tuple[int, int, int] = (255, 225, 140)  # warm golden glow
+    window_dark: tuple[int, int, int] = (45, 38, 28)
+    tree_trunk: tuple[tuple[int, int, int], tuple[int, int, int]] = ((105, 75, 42), (38, 28, 16))
+    tree_canopy: tuple[tuple[int, int, int], tuple[int, int, int]] = ((75, 145, 42), (22, 52, 16))
+    tree_canopy_light: tuple[tuple[int, int, int], tuple[int, int, int]] = ((105, 175, 65), (32, 62, 22))
+    water: tuple[tuple[int, int, int], tuple[int, int, int]] = ((90, 145, 185), (18, 32, 62))
+    water_light: tuple[tuple[int, int, int], tuple[int, int, int]] = ((130, 180, 210), (28, 48, 82))
+    fence: tuple[tuple[int, int, int], tuple[int, int, int]] = ((170, 130, 65), (58, 42, 22))
+    well: tuple[tuple[int, int, int], tuple[int, int, int]] = ((140, 128, 108), (48, 42, 38))
+    flower: tuple[tuple[int, int, int], tuple[int, int, int]] = ((250, 110, 130), (105, 35, 42))
+    stone: tuple[tuple[int, int, int], tuple[int, int, int]] = ((168, 158, 148), (58, 52, 48))
 
     @classmethod
     def color(cls, attr: str, night: bool) -> tuple[int, int, int]:
@@ -87,6 +87,8 @@ T_SKY = 14
 T_SKY_TREE = 15
 T_DOOR_CLOSED = 16
 T_MEETING = 17  # Town square meeting platform
+T_LANTERN = 18  # Lamp post
+T_SIGN = 19     # Village signpost
 
 
 def _build_village_map() -> list[list[int]]:
@@ -168,6 +170,21 @@ def _build_village_map() -> list[list[int]]:
     grid[7][6] = T_FLOWER
     grid[7][22] = T_FLOWER
     grid[7][23] = T_FLOWER
+    grid[12][2] = T_FLOWER
+    grid[12][3] = T_FLOWER
+    grid[12][26] = T_FLOWER
+    grid[12][27] = T_FLOWER
+
+    # Lantern posts along the main path
+    grid[5][14] = T_LANTERN
+    grid[5][17] = T_LANTERN
+    grid[9][14] = T_LANTERN
+    grid[9][17] = T_LANTERN
+    grid[12][14] = T_LANTERN
+    grid[12][17] = T_LANTERN
+
+    # Village signpost at entrance
+    grid[4][6] = T_SIGN
     grid[13][6] = T_FLOWER
     grid[13][22] = T_FLOWER
 
@@ -232,27 +249,46 @@ def _draw_tile(tile_type: int, night: bool) -> pygame.Surface:
 
     if tile_type == T_GRASS:
         surf.fill(c("grass_light"))
-        # Subtle grass texture
+        # Rich grass texture with variation
+        import random as _r
+        _r.seed(abs(hash(tile_type * 17 + (7 if night else 31))))
         for x in range(0, TILE_SIZE, 4):
             for y in range(0, TILE_SIZE, 4):
                 if (x + y) % 8 == 0:
                     surf.set_at((x + 1, y + 1), c("grass_dark"))
                     surf.set_at((x + 3, y + 1), c("grass_dark"))
+        # Occasional tiny flowers in grass
+        for _ in range(3):
+            fx = _r.randint(8, TILE_SIZE - 8)
+            fy = _r.randint(8, TILE_SIZE - 8)
+            flower_colors = [(255, 225, 130), (250, 210, 245), (210, 230, 255), (255, 215, 170)]
+            fc = flower_colors[_r.randint(0, 3)]
+            surf.set_at((fx, fy), fc)
+            surf.set_at((fx + 1, fy), fc)
+            surf.set_at((fx, fy + 1), fc)
 
     elif tile_type == T_PATH:
         surf.fill(c("path"))
-        # Dirt texture
-        for _ in range(20):
+        # Dirt texture with more variation
+        for _ in range(30):
             px = (_ * 37 + 13) % TILE_SIZE
             py = (_ * 23 + 7) % TILE_SIZE
             surf.set_at((px, py), c("path_dark"))
+            surf.set_at((px + 1, py), c("path_dark"))
+        # Small stones / gravel
+        for _ in range(5):
+            sx = (_ * 19 + 31) % TILE_SIZE
+            sy = (_ * 41 + 17) % TILE_SIZE
+            surf.set_at((sx, sy), (160, 150, 130))
+            surf.set_at((sx, sy + 1), (150, 140, 120))
 
     elif tile_type == T_PATH_DARK:
         surf.fill(c("path_dark"))
-        for _ in range(15):
+        for _ in range(20):
             px = (_ * 31 + 11) % TILE_SIZE
             py = (_ * 17 + 5) % TILE_SIZE
             surf.set_at((px, py), c("path"))
+            surf.set_at((px + 1, py), c("path"))
 
     elif tile_type == T_HOUSE_WALL:
         surf.fill(c("wall_cream"))
@@ -432,17 +468,77 @@ def _draw_tile(tile_type: int, night: bool) -> pygame.Surface:
         surf.fill(c("path"))
         # Stone circle (outer ring)
         pygame.draw.circle(surf, c("stone"), (40, 40), 28, 4)
-        # Inner compass lines
-        pygame.draw.line(surf, c("stone"), (40, 20), (40, 60), 2)
-        pygame.draw.line(surf, c("stone"), (20, 40), (60, 40), 2)
-        # Centre dot — warm glow at day, subtle at night
-        dot_color = c("window_glow") if not night else (180, 140, 80)
+        # Inner compass lines — cross pattern
+        pygame.draw.line(surf, c("stone"), (40, 14), (40, 66), 2)
+        pygame.draw.line(surf, c("stone"), (14, 40), (66, 40), 2)
+        # Diagonal lines for compass rose
+        d = 18  # diagonal offset
+        pygame.draw.line(surf, c("stone"), (40 - d, 40 - d), (40 + d, 40 + d), 1)
+        pygame.draw.line(surf, c("stone"), (40 + d, 40 - d), (40 - d, 40 + d), 1)
+        # Centre dot — warm glow
+        dot_color = (255, 200, 100) if not night else (180, 140, 60)
         surf.set_at((40, 40), dot_color)
+        surf.set_at((39, 39), dot_color)
+        surf.set_at((41, 41), dot_color)
+        surf.set_at((39, 41), dot_color)
+        surf.set_at((41, 39), dot_color)
+        # Small decorative stones around edge
+        import math as _m
+        for i in range(8):
+            ang = i * _m.pi / 4
+            sx = int(40 + 26 * _m.cos(ang))
+            sy = int(40 + 26 * _m.sin(ang))
+            if 0 <= sx < TILE_SIZE and 0 <= sy < TILE_SIZE:
+                surf.set_at((sx, sy), c("stone"))
+                surf.set_at((sx + 1, sy), c("stone"))
         # Night glow
         if night:
             s = pygame.Surface((24, 24), pygame.SRCALPHA)
             s.fill((255, 200, 100, 25))
             surf.blit(s, (28, 28))
+
+    elif tile_type == T_LANTERN:
+        """Lantern post — wooden pole with glowing lantern."""
+        surf.fill(c("grass_dark"))
+        # Post
+        pygame.draw.rect(surf, c("wood_dark"), (36, 30, 8, 50))
+        # Cross arm
+        pygame.draw.rect(surf, c("wood_dark"), (28, 34, 24, 4))
+        # Lantern body
+        lantern_color = c("window_glow") if night else (220, 200, 100)
+        pygame.draw.rect(surf, lantern_color, (34, 20, 12, 14))
+        # Lantern top cap
+        pygame.draw.rect(surf, c("wood_dark"), (32, 18, 16, 4))
+        # Night glow effect
+        if night:
+            glow_surf = pygame.Surface((40, 40), pygame.SRCALPHA)
+            glow_surf.fill((255, 200, 100, 20))
+            surf.blit(glow_surf, (20, 12))
+            # Extra warm light on ground
+            ground_glow = pygame.Surface((28, 12), pygame.SRCALPHA)
+            ground_glow.fill((255, 200, 100, 15))
+            surf.blit(ground_glow, (26, 68))
+
+    elif tile_type == T_SIGN:
+        """Village signpost — welcome sign with pointing arms."""
+        surf.fill(c("grass_light"))
+        # Post
+        pygame.draw.rect(surf, c("wood_dark"), (37, 30, 6, 50))
+        # Sign board
+        pygame.draw.rect(surf, c("wood_light"), (22, 24, 36, 18))
+        # Sign border
+        pygame.draw.rect(surf, c("wood_dark"), (22, 24, 36, 18), 2)
+        # Text placeholder lines (wood grain scars)
+        pygame.draw.line(surf, c("wood_dark"), (26, 30), (54, 30), 1)
+        pygame.draw.line(surf, c("wood_dark"), (26, 35), (50, 35), 1)
+        # Pointing arrows
+        arm_color = c("wood_dark")
+        pygame.draw.line(surf, arm_color, (20, 30), (10, 26), 2)
+        pygame.draw.line(surf, arm_color, (10, 26), (10, 34), 2)
+        pygame.draw.line(surf, arm_color, (60, 30), (70, 26), 2)
+        pygame.draw.line(surf, arm_color, (70, 26), (70, 34), 2)
+        # Post base
+        pygame.draw.rect(surf, c("stone"), (33, 72, 14, 8))
 
     return surf
 

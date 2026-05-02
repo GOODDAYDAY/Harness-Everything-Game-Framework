@@ -464,24 +464,51 @@ class WerewolfGame:
             return
 
         # ── 3. Title / phase info ──
+        # Decorative top banner background
+        banner_rect = pygame.Rect(SIDEBAR_X - 20, 0, 680, 100)
+        banner_color = (40, 30, 15) if is_night else (55, 45, 25)
+        pygame.draw.rect(screen, banner_color, banner_rect)
+        pygame.draw.rect(screen, (120, 90, 40), banner_rect, 2)
+
         title_text = render_text(
             "Pixel Werewolf", scale=FONT_SCALE_TITLE, color=(255, 220, 150),
             shadow=(60, 40, 10)
         )
-        screen.blit(title_text, (SIDEBAR_X, SIDEBAR_Y))
+        screen.blit(title_text, (SIDEBAR_X + 10, SIDEBAR_Y))
 
         phase_label = render_text(
             f"{state.phase.display_name}", scale=FONT_SCALE_PLAYER,
             color=(200, 200, 255) if is_night else (255, 255, 200),
             shadow=(30, 30, 60) if is_night else (60, 60, 30)
         )
-        screen.blit(phase_label, (SIDEBAR_X, SIDEBAR_Y + 36))
+        screen.blit(phase_label, (SIDEBAR_X + 10, SIDEBAR_Y + 40))
 
         day_label = render_text(
             f"Day {state.day}", scale=FONT_SCALE_PLAYER, color=(200, 200, 200),
             shadow=(40, 40, 40)
         )
-        screen.blit(day_label, (SIDEBAR_X, SIDEBAR_Y + 68))
+        screen.blit(day_label, (SIDEBAR_X + 200, SIDEBAR_Y + 40))
+
+        # ── 3a. Alive / Total counter with faction balance ──
+        alive_count = sum(1 for p in state.players.players if p.alive)
+        total_count = len(state.players.players)
+        alive_label = render_text(
+            f"Alive: {alive_count}/{total_count}", scale=FONT_SCALE_PLAYER,
+            color=(180, 255, 180) if alive_count > total_count // 2 else (255, 200, 150),
+            shadow=(20, 40, 20) if alive_count > total_count // 2 else (40, 30, 15)
+        )
+        screen.blit(alive_label, (SIDEBAR_X + 340, SIDEBAR_Y + 40))
+
+        # Faction balance
+        from game.roles import Team
+        werewolf_count = sum(1 for p in state.players.players if p.alive and p.role.team == Team.WEREWOLF)
+        village_count = sum(1 for p in state.players.players if p.alive and p.role.team == Team.VILLAGE)
+        balance_text = f"W{werewolf_count}:V{village_count}"
+        balance_label = render_text(
+            balance_text, scale=FONT_SCALE_LOG,
+            color=(255, 150, 150) if is_night else (200, 180, 100),
+        )
+        screen.blit(balance_label, (SIDEBAR_X + 500, SIDEBAR_Y + 48))
 
         # ── 3b. Click-handling: build player click rects during DAY_VOTE ──
         self._player_click_rects.clear()
@@ -495,6 +522,14 @@ class WerewolfGame:
                         self._player_click_rects.append((click_rect, p.index))
                     yy += LIST_SPACING
 
+        # ── 3c. Decorative section separator ──
+        sep_y = SIDEBAR_Y + 88
+        pygame.draw.line(screen, (80, 60, 30), (SIDEBAR_X + 10, sep_y), (SIDEBAR_X + 650, sep_y), 1)
+        pygame.draw.line(screen, (55, 50, 30), (SIDEBAR_X + 10, sep_y + 1), (SIDEBAR_X + 650, sep_y + 1), 1)
+        # Section header
+        header_text = render_text("Players", scale=FONT_SCALE_SMALL, color=(180, 180, 140))
+        screen.blit(header_text, (SIDEBAR_X + 10, sep_y + 4))
+
         # ── 4. Player list (sidebar) ──
         y = SIDEBAR_Y + LIST_START
         for p in state.players.players:
@@ -502,66 +537,108 @@ class WerewolfGame:
             is_human_target = (self._human_vote_target == p.index)
             
             if p.alive:
-                color = (220, 220, 220)
-                prefix = ">"
+                # Colour-code by team (visible only during day)
+                from game.roles import Team
+                if state.phase.is_day:
+                    if p.role.team == Team.WEREWOLF:
+                        team_color = (255, 160, 160)  # reddish for werewolves
+                    else:
+                        team_color = (200, 220, 240)  # bluish for villagers
+                else:
+                    team_color = (220, 220, 220)  # neutral at night
                 role_name_label = p.role.name_zh if state.phase.is_day else "???"
             else:
-                color = (100, 100, 100)
-                prefix = "x"
+                team_color = (80, 80, 80)  # greyed out
                 role_name_label = p.role.name_zh
 
             # Draw vote-target highlight background
             if is_human_target:
-                highlight_rect = pygame.Rect(SIDEBAR_X - 4, y - 2, 330, LIST_SPACING - 2)
+                highlight_rect = pygame.Rect(SIDEBAR_X + 4, y - 2, 400, LIST_SPACING - 2)
                 pygame.draw.rect(screen, (60, 50, 20), highlight_rect)
                 pygame.draw.rect(screen, (200, 180, 80), highlight_rect, 2)
-                color = (255, 220, 100)
+                team_color = (255, 220, 100)
             elif p.index == self._human_player_idx:
-                color = (180, 220, 255)  # highlight self in a different colour
+                # Subtle self-highlight
+                self_highlight = pygame.Rect(SIDEBAR_X + 4, y - 2, 400, LIST_SPACING - 2)
+                pygame.draw.rect(screen, (30, 40, 60), self_highlight)
+                team_color = (180, 220, 255)  # blue self highlight
 
-            sheriff_mark = "[S]" if p.is_sheriff else ""
+            # Alive indicator dot
+            if p.alive:
+                dot_color = (100, 255, 100)  # green dot
+            else:
+                dot_color = (200, 50, 50)  # red dot
+            pygame.draw.circle(screen, dot_color, (SIDEBAR_X + 12, y + 10), 4)
+
+            # Format: name + role + sheriff badge
+            name_part = p.name[:12]  # Truncate long names
+            if p.is_sheriff:
+                sheriff_badge = render_text("[S]", scale=FONT_SCALE_SMALL, color=(255, 200, 80))
+                screen.blit(sheriff_badge, (SIDEBAR_X + 22, y + 2))
+            
             line = render_text(
-                f"{prefix} {p.name} {sheriff_mark}[{role_name_label}]",
-                scale=FONT_SCALE_PLAYER, color=color
+                f"{name_part}",
+                scale=FONT_SCALE_PLAYER, color=team_color
             )
-            screen.blit(line, (SIDEBAR_X + 4, y))
+            screen.blit(line, (SIDEBAR_X + 46, y))
+            
+            # Role label (right side)
+            role_label = render_text(
+                f"[{role_name_label}]", scale=FONT_SCALE_SMALL,
+                color=(140, 180, 140) if p.alive else (80, 80, 80)
+            )
+            screen.blit(role_label, (SIDEBAR_X + 180, y + 4))
             
             # Show vote count during DAY_VOTE
             if state.phase == GamePhase.DAY_VOTE and p.alive:
                 votes = sum(1 for v in state.votes.values() if v == p.index)
                 if votes > 0:
                     vote_surf = render_text(f"[{votes}]", scale=FONT_SCALE_PLAYER, color=(255, 180, 80))
-                    screen.blit(vote_surf, (SIDEBAR_X + 280, y))
+                    screen.blit(vote_surf, (SIDEBAR_X + 300, y))
 
             y += LIST_SPACING
 
         # ── 5. Game log ──
-        y = LOG_START_Y
-        log_label = render_text("-- Game Log --", scale=FONT_SCALE_LOG, color=(160, 160, 160))
-        screen.blit(log_label, (SIDEBAR_X, y))
-        y += LOG_SPACING
+        y = LOG_START_Y - 24
+        # Section separator (double line for decoration)
+        pygame.draw.line(screen, (80, 60, 30), (SIDEBAR_X + 10, y), (SIDEBAR_X + 650, y), 1)
+        pygame.draw.line(screen, (55, 50, 30), (SIDEBAR_X + 10, y + 1), (SIDEBAR_X + 650, y + 1), 1)
+        y += 8
+        log_label = render_text("Game Log", scale=FONT_SCALE_SMALL, color=(180, 180, 140))
+        screen.blit(log_label, (SIDEBAR_X + 10, y))
+        y += 22
 
         for entry in state.log[-8:]:
-            text = render_text(entry["message"], scale=FONT_SCALE_LOG, color=(160, 160, 160))
-            screen.blit(text, (SIDEBAR_X, y))
+            # Determine log entry colour based on content
+            msg = entry["message"]
+            if "witch" in msg or "werewolf" in msg:
+                color = (200, 170, 170)
+            elif "vote" in msg or "lynched" in msg or "hanged" in msg:
+                color = (200, 190, 150)
+            elif "night" in msg:
+                color = (150, 150, 200)
+            else:
+                color = (200, 200, 200)
+            text = render_text(msg, scale=FONT_SCALE_LOG, color=color)
+            screen.blit(text, (SIDEBAR_X + 10, y))
             y += LOG_SPACING
 
         # ── 5b. Instruction text (context-aware) ──
         instr_y = 1400
         if state.phase == GamePhase.DAY_VOTE and self._human_voted:
-            instr = render_text("Vote cast - advancing...", scale=FONT_SCALE_LOG, color=(160, 200, 160))
+            instr = render_text("Vote cast - awaiting resolution...", scale=FONT_SCALE_LOG, color=(160, 200, 160))
         elif (state.phase == GamePhase.DAY_VOTE and not self._human_voted
               and self._human_player_idx < len(state.players.players)
               and state.players.get_player(self._human_player_idx).alive):
-            instr = render_text("Click a name above to cast your vote", scale=FONT_SCALE_LOG, color=(255, 200, 100))
+            instr = render_text("Click a villager name above to cast your vote", scale=FONT_SCALE_LOG, color=(255, 200, 100))
         elif state.phase == GamePhase.GAME_OVER:
             winner = state.winner or "unknown"
             instr = render_text(f"Game Over - {winner} team wins!", scale=FONT_SCALE_PLAYER, color=(255, 220, 150), shadow=(80, 60, 20))
         else:
-            instr = render_text("Game auto-plays - Watch the story unfold", scale=FONT_SCALE_LOG, color=(120, 120, 140))
-        screen.blit(instr, (SIDEBAR_X, instr_y))
+            instr = render_text("Game auto-plays - Watch the story unfold...", scale=FONT_SCALE_LOG, color=(120, 120, 140))
+        screen.blit(instr, (SIDEBAR_X + 10, instr_y))
 
-        # ── 6. Night overlay darkness ──
+        # ── 6. Night overlay darkness & vignette ──
         if is_night:
             # Darken edges for atmosphere (vignette effect — pixel style, no blur)
             vignette = pygame.Surface((2560, 1440), pygame.SRCALPHA)
@@ -575,6 +652,17 @@ class WerewolfGame:
                     4,
                 )
             screen.blit(vignette, (0, 0))
+
+        # ── 7. Decorative wooden frame around village view ──
+        # Left side border (village view area: 0..1900)
+        border_color = (65, 45, 25)
+        border_light = (85, 60, 35)
+        # Bottom border strip (at the bottom of village view)
+        pygame.draw.rect(screen, border_color, (0, 1440 - 16, SIDEBAR_X, 16))
+        pygame.draw.rect(screen, border_light, (0, 1440 - 16, SIDEBAR_X, 2))
+        # Top border strip
+        pygame.draw.rect(screen, border_color, (0, 0, SIDEBAR_X, 8))
+        pygame.draw.rect(screen, border_light, (0, 6, SIDEBAR_X, 2))
 
     def run(self):
         self.engine.run()
